@@ -1,0 +1,117 @@
+name:                noisefunge
+version:             0.0.1
+synopsis:            A live-coding obfuscated programming language
+cabal-version:       >= 1.8
+license:             GPL-3
+build-type:          Simple
+
+library
+  hs-source-dirs: src
+  exposed-modules:   Language.NoiseFunge,
+                     Language.NoiseFunge.API
+  other-modules:     Language.NoiseFunge.ALSA,
+                     Language.NoiseFunge.Beat,
+                     Language.NoiseFunge.Befunge,
+                     Language.NoiseFunge.Befunge.Operator,
+                     Language.NoiseFunge.Befunge.Process,
+                     Language.NoiseFunge.Befunge.VM,
+                     Language.NoiseFunge.Engine,
+                     Language.NoiseFunge.Note,
+                     Language.NoiseFunge.Server,
+                     Language.NoiseFunge.Server.Comm
+
+  build-depends:     base >= 4 && < 5,
+                     mtl,
+                     transformers,
+                     random,
+                     array,
+                     stm,
+                     lens,
+                     containers,
+                     data-default,
+                     bytestring >= 0.10.2,
+                     explicit-exception,
+                     stm,
+                     network,
+                     midi,
+                     alsa-seq,
+                     binary >= 0.7,
+                     ConfigFile
+                     
+  Ghc-options:       -Wall -O3 -threaded
+
+executable funged
+  hs-source-dirs: funged
+  main-is: funged.hs
+  build-depends: base >= 4 && < 5,
+                 noisefunge,
+                 mtl,
+                 array,
+                 transformers,
+                 ncurses,
+                 network,
+                 ConfigFile
+
+  Ghc-options:       -Wall -O3 -threaded 
+
+executable nfviewer
+  hs-source-dirs: nfviewer
+  main-is: nfviewer.hs
+  other-modules:    Tiler
+
+  build-depends: base >= 4 && < 5,
+                 noisefunge,
+                 mtl,
+                 array,
+                 transformers,
+                 ncurses,
+                 lens,
+                 random,
+                 containers
+
+  Ghc-options:       -Wall -O3 -threaded 
+
+executable nftop
+  hs-source-dirs: nftop
+  main-is: nftop.hs
+
+  build-depends: base >= 4 && < 5,
+                 noisefunge,
+                 mtl,
+                 array,
+                 transformers,
+                 ncurses,
+                 lens,
+                 data-default,
+                 containers
+
+  Ghc-options:       -Wall -O3 -threaded 
+
+executable nfloader
+  hs-source-dirs: nfloader
+  main-is: nfloader.hs
+
+  build-depends: base >= 4 && < 5,
+                 noisefunge,
+                 mtl,
+                 array,
+                 transformers,
+                 lens,
+                 containers
+
+  Ghc-options:       -Wall -O3 -threaded 
+
+executable nfkill
+  hs-source-dirs: nfkill
+  main-is: nfkill.hs
+
+  build-depends: base >= 4 && < 5,
+                 noisefunge,
+                 mtl,
+                 transformers,
+                 lens,
+                 containers,
+                 optparse-applicative
+
+  Ghc-options:       -Wall -O3 -threaded 
+
