@@ -37,8 +37,6 @@ import Control.Monad.RWS
 
 import Data.Default
 
-import System.IO
-
 import Language.NoiseFunge.Beat
 import Language.NoiseFunge.Befunge.VM
 import Language.NoiseFunge.Befunge.Process
@@ -115,7 +113,6 @@ befungeRunner temp params bfth = forever $ readIn >>= handle where
             let (vm', ops', ds) = runRWS (advance vm) params ops
                 dead = [(pid, msg) | (pid, msg, _) <- vm'^.deadProcesses]
                 vmstats = fmap (^.processStats) <$> vm'^.vmStats
-            liftIO $ hPutStrLn stderr (show vmstats)
             seq (length vmstats) $ liftIO . atomically $
                 writeTChan dout (bt, (ds []), dead, vmstats)
             bfsVM .= vm'

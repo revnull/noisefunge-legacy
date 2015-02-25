@@ -85,22 +85,22 @@ data Exec w s m =
 
 type ProcessM w s m = ContT (Exec w s m) (StateT s m)
 
-newtype ProcessStateT w s m a =
-    PST { runPST :: (Exec w s m -> ProcessM w s m ()) -> ProcessM w s m a }
+type Trap w s m = Exec w s m -> ProcessM w s m ()
+
+newtype ProcessStateT w s m a = PST {
+    runPST :: ReaderT (Trap w s m) (ProcessM w s m) a }
 
 succeed :: ProcessM w s m a -> ProcessStateT w s m a
-succeed m = PST $ \_ -> m
+succeed m = PST $ lift m
 
 runPS :: Monad m => ProcessStateT w s m a -> s -> m (Exec w s m, s)
 runPS (PST pst) s = runStateT (runContT runner return) s where
-    runner = callCC $ \done -> do
-        err <- callCC $ \trap -> do
-            void $ pst trap
-            done (Halted Nothing)
-        return err
+    runner = callCC $ \trap -> do
+        void $ runReaderT pst trap
+        return (Halted Nothing)
 
 instance Functor m => Functor (ProcessStateT w s m) where
-    fmap f (PST m) = PST $ \e -> fmap f (m e)
+    fmap f (PST m) = PST $ fmap f m
 
 instance MonadTrans (ProcessStateT w s) where
     lift = succeed . lift . lift
@@ -110,9 +110,9 @@ instance MonadIO m => MonadIO (ProcessStateT w s m) where
 
 instance Monad m => Monad (ProcessStateT w s m) where
     return = succeed . return
-    m >>= f = PST $ \e -> do
-        a <- runPST m e
-        runPST (f a) e
+    m >>= f = PST $ do
+        a <- runPST m
+        runPST (f a)
 
 instance (Monoid w', MonadWriter w' m) =>
     MonadWriter w' (ProcessStateT w s m) where
@@ -122,7 +122,7 @@ instance (Monoid w', MonadWriter w' m) =>
 
 instance MonadReader r m => MonadReader r (ProcessStateT w s m) where
     ask = succeed . lift . lift $ ask
-    local f (PST m) = PST $ \e -> liftLocal ask (mapStateT . local) f (m e)
+    local f (PST m) = PST $ mapReaderT (liftLocal ask (mapStateT . local) f) m
 
 instance Monad m => MonadState s (ProcessStateT w s m) where
     get = succeed . lift $ get
@@ -185,10 +185,12 @@ kill :: Maybe String -> Process w s m -> Process w s m
 kill reas proc = set procExec (Halted reas) proc
 
 trap :: ((a -> ProcessStateT w s m b) -> Exec w s m) -> ProcessStateT w s m a
-trap f = PST $ \e -> callCC $ \k -> do
-    let ex = f (succeed . k)
-    e ex
-    undefined -- We will never reach this line
+trap f = PST $ do
+    e <- ask
+    lift $ callCC $ \k -> do
+        let ex = f (succeed . k)
+        e ex
+        undefined -- We will never reach this line
 
 yield :: ProcessStateT w s m ()
 yield = trap $ \k -> Running (k ())

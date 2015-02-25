@@ -52,6 +52,13 @@ $(makeLenses ''ViewerState)
 
 data TextBuf = TB ColorID Integer Window (IORef String)
 
+safeChars :: String -> String
+safeChars str = do
+    c <- str
+    if isPrint c
+        then return c
+        else return ' '
+
 newTextBuf :: ColorID -> Integer -> Int -> Window -> IO TextBuf
 newTextBuf col row size win =
     TB col row win <$> newIORef (take size (repeat ' '))
@@ -65,7 +72,7 @@ putTextBuf (TB c r w s) st = do
     updateWindow w $ do
         moveCursor r 0
         setColor c
-        drawString $ str'
+        drawString . safeChars $ str'
   where escape '\n' = "\\n"
         escape ch = [ch]
 
@@ -73,7 +80,7 @@ highlight :: ProgArray -> Pos -> ColorID -> Update ()
 highlight arr (r,c) col = do
     moveCursor (fromIntegral r) (fromIntegral c)
     setColor col
-    drawString [chr . fromIntegral $ (arr ! (r, c))]
+    drawString . safeChars $ [chr . fromIntegral $ (arr ! (r, c))]
 
 drawBoard :: ProgArray -> Update ()
 drawBoard arr = do
@@ -83,7 +90,7 @@ drawBoard arr = do
     forM_ [0..rm] $ \row -> do
         moveCursor (fromIntegral row) 0
         let str = [chr . fromIntegral $ (arr ! (row, col)) | col <- [0..cm]]
-        drawString str
+        drawString . safeChars $ str
 
 newProgView :: ColorID -> ColorID -> TextBuf -> ProgArray ->
     S.StateT ViewerState Curses (Maybe (Tile, Window, Delta -> Curses ()))
