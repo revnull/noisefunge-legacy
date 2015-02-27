@@ -227,7 +227,8 @@ mainCurses conn =
                         Nothing -> do
                             pv <- newView arr
                             case pv of
-                                Nothing -> procs.(at pid) .= Just Nothing
+                                Nothing -> do
+                                    procs.(at pid) .= Just Nothing
                                 pv'@(Just (_, _, fn)) -> do
                                     procs.(at pid) .= Just pv'
                                     lift $ fn delt
@@ -258,6 +259,8 @@ mainCurses conn =
                             procs.(at pid) .= Nothing
                             tiler %= untile t
                             lift $ closeWindow w'
+                        Just Nothing -> do
+                            procs.(at pid) .= Nothing
                         _ -> return ()
                     case m of
                         Nothing -> return ()
@@ -268,5 +271,5 @@ mainCurses conn =
                             lift $ putTextBuf tbe "|"
                     return ()
                 _ -> return ()
-
             lift $ render
+

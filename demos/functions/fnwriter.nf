@@ -1,5 +1,5 @@
->[ZxkL]v
+>[Zxkl]v
  v     <
- >[Zx+5kl]v
- v]LkC+xZ[<
+ >[Zx-5kl]v
+ v]LkA-xZ[<
 ^<
