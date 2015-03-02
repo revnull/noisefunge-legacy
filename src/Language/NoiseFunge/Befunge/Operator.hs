@@ -26,6 +26,7 @@ module Language.NoiseFunge.Befunge.Operator (OperatorParams(..),
                                              logError, logDebug
                                              ) where
 
+import Control.Applicative
 import Control.Lens
 import Control.Monad.RWS
 
@@ -40,6 +41,7 @@ import System.Random
 import Language.NoiseFunge.Befunge.Process
 import Language.NoiseFunge.Befunge.VM
 import Language.NoiseFunge.Note
+import Language.NoiseFunge.Beat
 
 boundedStep :: (Word8, Word8) -> Int -> PC -> Either Pos Pos
 boundedStep (_, xm) s (PC (y, x) L) =
@@ -231,6 +233,27 @@ stdOp 0x70 = Just $ do -- p
     let arr' = arr // [((y,x),v)]
     mem .= arr'
     tellMem
+
+stdOp 0x71 = Just $ do -- q
+    let quant = do
+            bt <- getTime
+            if (bt^.subbeat) == 0
+                then return ()
+                else yield >> quant
+    lift quant
+
+stdOp 0x51 = Just $ do -- Q
+    x <- fromIntegral <$> popOp
+    let quant = do
+            bt <- getTime
+            if (bt^.subbeat) == 0 && (bt^.beat) `mod` x == 0
+                then return ()
+                else yield >> quant
+    lift quant
+
+stdOp 0x73 = Just $ do -- s
+    x <- popOp
+    forM_ [1..x] $ const (lift yield)
 
 stdOp 0x5c = Just $ do -- \
     a <- popOp

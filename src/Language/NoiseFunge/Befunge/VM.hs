@@ -32,6 +32,7 @@ module Language.NoiseFunge.Befunge.VM (VM(..), ProcessStateT,
                                        vmPID, vmExec, vmMisc, 
                                        yield, readBuf, writeBuf, end, die,
                                        getPID, bcastBuf, fork, rand,
+                                       getTime,
                                        getProcessState,
                                        program, advance) where
 
@@ -51,6 +52,8 @@ import qualified Data.Map as M
 import Data.Word
 
 import System.Random
+
+import Language.NoiseFunge.Beat
 
 data Queue a = Q [a] [a]
 
@@ -82,6 +85,7 @@ data Exec w s m =
   | PPID (PID -> ProcessStateT w s m ())
   | Fork (Bool -> ProcessStateT w s m ())
   | Rand (StdGen -> (ProcessStateT w s m (), StdGen))
+  | Time (Beat -> ProcessStateT w s m ())
 
 type ProcessM w s m = ContT (Exec w s m) (StateT s m)
 
@@ -219,7 +223,10 @@ die :: String -> ProcessStateT w s m a
 die s = trap (const (Halted (Just s)))
 
 getPID :: ProcessStateT w s m PID
-getPID = trap $ PPID
+getPID = trap PPID
+
+getTime :: ProcessStateT w s m Beat
+getTime = trap Time
 
 getProcessState :: Monad m => ProcessStateT w s m s
 getProcessState = succeed . lift $ get
@@ -241,8 +248,8 @@ addProcess :: String -> Program w s m -> VM w s m -> (Process w s m, VM w s m)
 addProcess name f vm = (p, queueProcess p vm') where
     (p, vm') = makeProcess name f vm
 
-advance :: (Monad m, Functor m) => VM w s m -> m (VM w s m)
-advance vm = flip evalStateT (vm, mempty) $ initialize >> advanced where
+advance :: (Monad m, Functor m) => Beat -> VM w s m -> m (VM w s m)
+advance bt vm = flip evalStateT (vm, mempty) $ initialize >> advanced where
     initialize = zoom _1 $ do
         killed <- execWriterT $ do
             zoom processQueue filterQueue
@@ -260,7 +267,7 @@ advance vm = flip evalStateT (vm, mempty) $ initialize >> advanced where
             return False
         _ -> return True
     advanced = do
-        res <- runMaybeT $ runQueued <|> runBuffers
+        res <- runMaybeT $ runQueued bt <|> runBuffers
         case res of
             Nothing -> do
                 _1.buffers %= fmap (set bcastValues [])
@@ -279,8 +286,9 @@ runStep p = case (p^.procExec, p^.procState) of
     (Running f, s) -> runPS f s
     ex -> return ex
 
-runQueued :: Monad m => MaybeT (StateT (VM w s m, Queue (Process w s m)) m) () 
-runQueued = do
+runQueued :: Monad m => Beat ->
+    MaybeT (StateT (VM w s m, Queue (Process w s m)) m) () 
+runQueued bt = do
     q <- use (_1.processQueue)
     (p, q') <- MaybeT (return $ qPop q)
     _1.processQueue .= q'
@@ -319,7 +327,9 @@ runQueued = do
             let prog = program (p^.procState) (f True)
             c <- _1 %%= makeProcess (p^.procID._2) prog
             _1.processQueue %= qPush c
-
+        Time f -> do
+            _1.processQueue %= qPush (set procExec (Running (f bt)) p')
+        
 runBuffers :: (Monad m) =>
     MaybeT (StateT (VM w s m, Queue (Process w s m)) m) ()
 runBuffers = do

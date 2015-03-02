@@ -110,7 +110,7 @@ befungeRunner temp params bfth = forever $ readIn >>= handle where
         forM_ nextBeats $ \bt -> do
             vm <- use bfsVM
             ops <- use bfsOps
-            let (vm', ops', ds) = runRWS (advance vm) params ops
+            let (vm', ops', ds) = runRWS (advance bt vm) params ops
                 dead = [(pid, msg) | (pid, msg, _) <- vm'^.deadProcesses]
                 vmstats = fmap (^.processStats) <$> vm'^.vmStats
             seq (length vmstats) $ liftIO . atomically $
