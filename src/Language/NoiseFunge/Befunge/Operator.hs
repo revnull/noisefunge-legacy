@@ -234,6 +234,12 @@ stdOp 0x70 = Just $ do -- p
     mem .= arr'
     tellMem
 
+stdOp 0x63 = Just $ do -- c
+    y <- popOp
+    x <- popOp
+    arr <- use mem
+    runOp (arr ! (y,x))
+
 stdOp 0x71 = Just $ do -- q
     let quant = do
             bt <- getTime
@@ -289,6 +295,10 @@ stdOp 0x5f = Just $ do -- _
     if a == 0
         then pc.dir .= R
         else pc.dir .= L
+
+stdOp 0x27 = Just $ do -- '
+    a <- popOp
+    when (a == 0) $ jump .= True
 
 stdOp 0x3f = Just $ do -- ?
     r <- lift . rand $ randomR (0, 3)
