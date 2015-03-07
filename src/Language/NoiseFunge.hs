@@ -21,9 +21,14 @@ module Language.NoiseFunge (Tempo(..), bpm, subbeats,
                             Beat(..), beat, subbeat,
                             ServerConfig(..),
                             OperatorParams(..),
+                            Operator,
+                            opName, opChar, opDesc,
+                            stdOps,
                             runServer) where
 
 import Language.NoiseFunge.Beat
 import Language.NoiseFunge.Befunge
 import Language.NoiseFunge.Server
 
+import Language.NoiseFunge.Befunge.Process
+import Language.NoiseFunge.Befunge.Operator

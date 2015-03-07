@@ -22,6 +22,7 @@
 module Language.NoiseFunge.Befunge.Operator (OperatorParams(..),
                                              move, getOp, runOp, quoteOp,
                                              fnStackOp,
+                                             stdOps,
                                              tellMem, operators,
                                              logError, logDebug
                                              ) where
@@ -34,6 +35,7 @@ import qualified Data.Array as Arr
 import Data.Array.Unboxed
 import Data.Char
 import Data.Default
+import qualified Data.Map as M
 import Data.Word
 
 import System.Random
@@ -146,334 +148,289 @@ getOp = do
     let i = (fromIntegral x, fromIntegral y)
     (! i) `fmap` use mem
 
-stdOp :: Word8 -> Maybe (Fungine ())
-stdOp 0x20 = Just $ do -- ' '
-    return ()
-
-stdOp 0x3c = Just $ do -- <
-    pc.dir .= L
-
-stdOp 0x3e = Just $ do -- >
-    pc.dir .= R
-
-stdOp 0x76 = Just $ do -- v
-    pc.dir .= D
-
-stdOp 0x5e = Just $ do -- ^
-    pc.dir .= U
-
-stdOp 0x30 = Just $ do -- 0
-    pushOp 0
-
-stdOp 0x31 = Just $ do -- 1
-    pushOp 1
-
-stdOp 0x32 = Just $ do -- 2
-    pushOp 2
-
-stdOp 0x33 = Just $ do -- 3
-    pushOp 3
-
-stdOp 0x34 = Just $ do -- 4
-    pushOp 4
-
-stdOp 0x35 = Just $ do -- 5
-    pushOp 5
-
-stdOp 0x36 = Just $ do -- 6
-    pushOp 6
-
-stdOp 0x37 = Just $ do -- 7
-    pushOp 7
-
-stdOp 0x38 = Just $ do -- 8
-    pushOp 8
-
-stdOp 0x39 = Just $ do -- 9
-    pushOp 9
-
-stdOp 0x41 = Just $ do -- A
-    pushOp 10
-
-stdOp 0x42 = Just $ do -- B
-    pushOp 11
-
-stdOp 0x43 = Just $ do -- C
-    pushOp 12
-
-stdOp 0x44 = Just $ do -- D
-    pushOp 13
-
-stdOp 0x45 = Just $ do -- E
-    pushOp 14
-
-stdOp 0x46 = Just $ do -- F
-    pushOp 15
-
-stdOp 0x4b = Just $ do -- K
-    new <- lift $ fork
-    if new
-        then do
-            ticks .= 0
-            pushOp 1
-            tellMem
-        else pushOp 0
-
-stdOp 0x67 = Just $ do -- g
-    y <- popOp
-    x <- popOp
-    arr <- use mem
-    pushOp (arr ! (y,x))
-
-stdOp 0x70 = Just $ do -- p
-    y <- popOp
-    x <- popOp
-    v <- popOp
-    arr <- use mem
-    let arr' = arr // [((y,x),v)]
-    mem .= arr'
-    tellMem
-
-stdOp 0x63 = Just $ do -- c
-    y <- popOp
-    x <- popOp
-    arr <- use mem
-    runOp (arr ! (y,x))
-
-stdOp 0x71 = Just $ do -- q
-    let quant = do
-            bt <- getTime
-            if (bt^.subbeat) == 0
-                then return ()
-                else yield >> quant
-    lift quant
-
-stdOp 0x51 = Just $ do -- Q
-    x <- fromIntegral <$> popOp
-    let quant = do
-            bt <- getTime
-            if (bt^.subbeat) == 0 && (bt^.beat) `mod` x == 0
-                then return ()
-                else yield >> quant
-    lift quant
-
-stdOp 0x73 = Just $ do -- s
-    x <- popOp
-    forM_ [1..x] $ const (lift yield)
-
-stdOp 0x5c = Just $ do -- \
-    a <- popOp
-    b <- popOp
-    pushOp a
-    pushOp b
-
-stdOp 0x24 = Just $ do -- $
-    void popOp
-
-stdOp 0x23 = Just $ do -- #
-    jump .= True
-
-stdOp 0x22 = Just $ do -- "
-    quote .= True
-
-stdOp 0x5b = Just $ do -- [
-    fnStack .= Just []
-
-stdOp 0x3a = Just $ do -- :
-    a <- popOp
-    pushOp a
-    pushOp a
-
-stdOp 0x7c = Just $ do -- |
-    a <- popOp
-    if a == 0
-        then pc.dir .= D
-        else pc.dir .= U
-
-stdOp 0x5f = Just $ do -- _
-    a <- popOp
-    if a == 0
-        then pc.dir .= R
-        else pc.dir .= L
-
-stdOp 0x27 = Just $ do -- '
-    a <- popOp
-    when (a == 0) $ jump .= True
-
-stdOp 0x3f = Just $ do -- ?
-    r <- lift . rand $ randomR (0, 3)
-    let d = case (r :: Int) of
-            0 -> L
-            1 -> R
-            2 -> U
-            3 -> D
-            _ -> error "Random failure in ?"
-    pc.dir .= d
-
-stdOp 0x72 = Just $ do -- r
-    r <- lift . rand $ random
-    pushOp r
-
-stdOp 0x52 = Just $ do -- R
-    a <- popOp
-    b <- popOp
-    r <- lift . rand $ randomR (b, a)
-    pushOp r
-
-stdOp 0x21 = Just $ do -- !
-    a <- popOp
-    if a == 0
-        then pushOp 1
-        else pushOp 0
-
-stdOp 0x60 = Just $ do -- `
-    a <- popOp
-    b <- popOp
-    if b > a
-        then pushOp 1
-        else pushOp 0
-
-stdOp 0x2b = Just $ do -- +
-    a <- popOp
-    b <- popOp
-    pushOp (a + b)
-
-stdOp 0x2d = Just $ do -- -
-    a <- popOp
-    b <- popOp
-    pushOp (b - a)
-
-stdOp 0x2a = Just $ do -- *
-    a <- popOp
-    b <- popOp
-    pushOp (a * b)
-
-stdOp 0x2f = Just $ do -- /
-    a <- popOp
-    b <- popOp
-    if a /= 0
-        then pushOp (b `div` a)
-        else do
-            dieError "Divide by zero" 255 >>= pushOp
-
-stdOp 0x25 = Just $ do -- %
-    a <- popOp
-    b <- popOp
-    if a /= 0
-        then pushOp (b `mod` a)
-        else do
-            dieError "Modulo by zero" 0 >>= pushOp
-
-stdOp 0x2e = Just $ do -- .
-    a <- popOp
-    outbuf <- use progOut
-    lift $ writeBuf outbuf a
-
-stdOp 0x3b = Just $ do -- ;
-    a <- popOp
-    outbuf <- use progOut
-    lift $ bcastBuf outbuf a
-
-stdOp 0x2c = Just $ do -- ,
-    a <- (chr . fromIntegral) `fmap` popOp
-    tell $ def { _events = [StringEvent [a]] }
-
-stdOp 0x26 = Just $ do -- &
-    a <- popOp
-    tell $ def { _events = [StringEvent $ show a] }
-
-stdOp 0x7e = Just $ do -- ~
-    inbuf <- use progIn
-    ch <- lift $ readBuf inbuf
-    pushOp ch
-
-stdOp 0x4d = Just $ do -- M (major chord)
-    nb <- use noteBuf
-    n <- case nb of
-        Nothing -> dieError "Can't play empty note" def
-        (Just n) -> return n
-    let nes = do
-            ch <- [0, 4, 7]
-            return $ NoteEvent (pitch %~ (ch +) $ n)
-    tell $ def { _events = nes }
-
-stdOp 0x6d = Just $ do -- m (minor chord)
-    nb <- use noteBuf
-    n <- case nb of
-        Nothing -> dieError "Can't play empty note" def
-        (Just n) -> return n
-    let nes = do
-            ch <- [0, 3, 7]
-            return $ NoteEvent (pitch %~ (ch +) $ n)
-    tell $ def { _events = nes }
-
-stdOp 0x4e = Just $ do -- N (major 7th chord)
-    nb <- use noteBuf
-    n <- case nb of
-        Nothing -> dieError "Can't play empty note" def
-        (Just n) -> return n
-    let nes = do
-            ch <- [0, 4, 7, 11]
-            return $ NoteEvent (pitch %~ (ch +) $ n)
-    tell $ def { _events = nes }
-
-stdOp 0x6e = Just $ do -- n (minor 7th chord)
-    nb <- use noteBuf
-    n <- case nb of
-        Nothing -> dieError "Can't play empty note" def
-        (Just n) -> return n
-    let nes = do
-            ch <- [0, 3, 7, 11]
-            return $ NoteEvent (pitch %~ (ch +) $ n)
-    tell $ def { _events = nes }
-
-stdOp 0x7a = Just $ do -- z (write buffer)
-    dur <- popOp
-    vel <- popOp
-    pit <- popOp
-    cha <- popOp
-    noteBuf .= Just (Note cha pit vel dur)
-
-stdOp 0x5a = Just $ do -- Z (play buffer)
-    nb <- use noteBuf
-    ne <- case nb of
-        Nothing -> dieError "Can't play empty note" (NoteEvent def)
-        (Just n) -> return $ NoteEvent n
-    tell $ def { _events = [ne] }
-
-stdOp 0x79 = Just $ do -- y (write channel)
-    writeNoteBuf channel
-
-stdOp 0x59 = Just $ do -- Y (read channel)
-    readNoteBuf channel
-
-stdOp 0x78 = Just $ do -- x (write pitch)
-    writeNoteBuf pitch
-
-stdOp 0x58 = Just $ do -- X (read pitch)
-    readNoteBuf pitch
-
-stdOp 0x77 = Just $ do -- w (write velocity)
-    writeNoteBuf velocity
-
-stdOp 0x57 = Just $ do -- W (read velocity)
-    readNoteBuf velocity
-
-stdOp 0x75 = Just $ do -- u (write duration)
-    writeNoteBuf duration
-
-stdOp 0x55 = Just $ do -- U (read duration)
-    readNoteBuf duration
-
-stdOp 0x40 = Just $ do -- @
-    lift $ end
-
-stdOp _ = Nothing -- Noop
+stdOps :: M.Map Word8 Operator
+stdOps = M.fromList $ [
+    mkStdOp "NOP" ' ' "Do Nothing" $ return ()
+    , mkStdOp "Left" '<' "Change direction to left." $ do
+        pc.dir .= L
+    , mkStdOp "Right" '>' "Change direction to right." $ do
+        pc.dir .= R
+    , mkStdOp "Down" 'v' "Change direction to down." $ do
+        pc.dir .= D
+    , mkStdOp "Up" '^' "Change direction to up." $ do
+        pc.dir .= U
+    , mkStdOp "0" '0' "Push 0 onto the stack" $
+        pushOp 0
+    , mkStdOp "1" '1' "Push 1 onto the stack" $
+        pushOp 1
+    , mkStdOp "2" '2' "Push 2 onto the stack" $
+        pushOp 2
+    , mkStdOp "3" '3' "Push 3 onto the stack" $
+        pushOp 3
+    , mkStdOp "4" '4' "Push 4 onto the stack" $
+        pushOp 4
+    , mkStdOp "5" '5' "Push 5 onto the stack" $
+        pushOp 5
+    , mkStdOp "6" '6' "Push 6 onto the stack" $
+        pushOp 6
+    , mkStdOp "7" '7' "Push 7 onto the stack" $
+        pushOp 7
+    , mkStdOp "8" '8' "Push 8 onto the stack" $
+        pushOp 8
+    , mkStdOp "9" '9' "Push 9 onto the stack" $
+        pushOp 9
+    , mkStdOp "A" 'A' "Push 10 onto the stack" $
+        pushOp 10
+    , mkStdOp "B" 'B' "Push 11 onto the stack" $
+        pushOp 11
+    , mkStdOp "C" 'C' "Push 12 onto the stack" $
+        pushOp 12
+    , mkStdOp "D" 'D' "Push 13 onto the stack" $
+        pushOp 13
+    , mkStdOp "E" 'E' "Push 14 onto the stack" $
+        pushOp 14
+    , mkStdOp "F" 'F' "Push 15 onto the stack" $
+        pushOp 15
+    , mkStdOp "Fork" 'K' "Fork a thread. Push 1 for child, 0 for parent" $ do
+        new <- lift $ fork
+        if new
+            then do
+                ticks .= 0
+                pushOp 1
+                tellMem
+            else pushOp 0
+    , mkStdOp "Get" 'g' "Pop y and x. Push memory at (y,x)" $ do
+        y <- popOp
+        x <- popOp
+        arr <- use mem
+        pushOp (arr ! (y,x))
+    , mkStdOp "Put" 'p' "Pop y, x, and v. Write v to (y,x)" $ do
+        y <- popOp
+        x <- popOp
+        v <- popOp
+        arr <- use mem
+        let arr' = arr // [((y,x),v)]
+        mem .= arr'
+        tellMem
+    , mkStdOp "Call" 'c' "Pop y and x. Run opcode at (y,x)" $ do
+        y <- popOp
+        x <- popOp
+        arr <- use mem
+        runOp (arr ! (y,x))
+    , mkStdOp "Quantize" 'q' "Wait for the next beat" $ do
+        let quant = do
+                bt <- getTime
+                if (bt^.subbeat) == 0
+                    then return ()
+                    else yield >> quant
+        lift quant
+    , mkStdOp "QuantizeN" 'Q'
+        "Pop x. Wait for a beat that is divisible by x." $ do
+        x <- fromIntegral <$> popOp
+        let quant = do
+                bt <- getTime
+                if (bt^.subbeat) == 0 && (bt^.beat) `mod` x == 0
+                    then return ()
+                    else yield >> quant
+        lift quant
+    , mkStdOp "Sleep" 's' "Pop x. Sleep for x subbeats." $ do
+        x <- popOp
+        forM_ [1..x] $ const (lift yield)
+    , mkStdOp "Swap" '\\' "Swap the top two items on the stack" $ do
+        a <- popOp
+        b <- popOp
+        pushOp a
+        pushOp b
+    , mkStdOp "Chomp" '$' "Discard the top item on the stack" $ do
+        void popOp
+    , mkStdOp "Jump" '#' "Jump over the next opcode." $ do
+        jump .= True
+    , mkStdOp "Quote" '"' "Start/Stop quote mode." $ do       
+        quote .= True
+    , mkStdOp "Defun" '[' "Start a function definition." $ do
+        fnStack .= Just []
+    , mkStdOp "Defun(end)" ']' "End a function definition." $ do
+        dieError "Not defining a function." ()
+    , mkStdOp "Dup" ':' "Duplicate the top object on the stack." $ do
+        a <- popOp
+        pushOp a
+        pushOp a
+    , mkStdOp "Cond(V)" '|' "Pop x. If x is 0, go down, otherwise go up." $ do       
+        a <- popOp
+        if a == 0
+            then pc.dir .= D
+            else pc.dir .= U
+    , mkStdOp "Cond(H)" '_' "Pop x. If x is 0, go right, else left." $ do
+        a <- popOp
+        if a == 0
+            then pc.dir .= R
+            else pc.dir .= L
+    , mkStdOp "Cond(Jump)" '\'' "Pop x. If x is 0, jump." $ do
+        a <- popOp
+        when (a == 0) $ jump .= True
+    , mkStdOp "Random(Dir)" '?' "Change to a random direction." $ do
+        r <- lift . rand $ randomR (0, 3)
+        let d = case (r :: Int) of
+                0 -> L
+                1 -> R
+                2 -> U
+                3 -> D
+                _ -> error "Random failure in ?"
+        pc.dir .= d
+    , mkStdOp "Random(Byte)" 'r' "Push a random byte onto the stack." $ do
+        r <- lift . rand $ random
+        pushOp r
+    , mkStdOp "Random(Range)" 'R'
+        "Pop x and y. Push a random byte between x and y (inclusive)." $ do
+        a <- popOp
+        b <- popOp
+        r <- lift . rand $ randomR (b, a)
+        pushOp r
+    , mkStdOp "Not" '!' "Pop x. If x is 0, push 1, else push 0." $ do
+        a <- popOp
+        if a == 0
+            then pushOp 1
+            else pushOp 0
+    , mkStdOp "GT" '`' "Pop x and y. If y > x, push 1, else push 0." $ do
+        a <- popOp
+        b <- popOp
+        if b > a
+            then pushOp 1
+            else pushOp 0
+    , mkStdOp "Add" '+' "Pop x and y. Push y + x." $ do
+        a <- popOp
+        b <- popOp
+        pushOp (a + b)
+    , mkStdOp "Sub" '-' "Pop x and y. Push y - x." $ do
+        a <- popOp
+        b <- popOp
+        pushOp (b - a)
+    , mkStdOp "Mul" '*' "Pop x and y. Push y * x." $ do
+        a <- popOp
+        b <- popOp
+        pushOp (a * b)
+    , mkStdOp "Div" '/' "Pop x and y. Push y / x." $ do
+        a <- popOp
+        b <- popOp
+        if a /= 0
+            then pushOp (b `div` a)
+            else do
+                dieError "Divide by zero" 255 >>= pushOp
+    , mkStdOp "Mod" '%' "Pop x and y. Push y % x." $ do
+        a <- popOp
+        b <- popOp
+        if a /= 0
+            then pushOp (b `mod` a)
+            else do
+                dieError "Modulo by zero" 0 >>= pushOp
+    , mkStdOp "Output" '.' "Pop x. Write x to output buffer." $ do
+        a <- popOp
+        outbuf <- use progOut
+        lift $ writeBuf outbuf a
+    , mkStdOp "Broadcast" ';' "Pop x. Broadcast x to output buffer." $ do
+        a <- popOp
+        outbuf <- use progOut
+        lift $ bcastBuf outbuf a
+    , mkStdOp "Read" '~' "Read a value from input buffer and push it." $ do
+        inbuf <- use progIn
+        ch <- lift $ readBuf inbuf
+        pushOp ch
+    , mkStdOp "Print(Char)" ',' "Pop x. Print x as a character." $ do 
+        a <- (chr . fromIntegral) `fmap` popOp
+        tell $ def { _events = [StringEvent [a]] }
+    , mkStdOp "Print(Byte)" '&' "Pop x. Print x as a number." $ do
+        a <- popOp
+        tell $ def { _events = [StringEvent $ show a] }
+    , mkStdOp "Major" 'M' "Pop x. Play major chord of pitch x." $ do
+        nb <- use noteBuf
+        n <- case nb of
+            Nothing -> dieError "Can't play empty note" def
+            (Just n) -> return n
+        let nes = do
+                ch <- [0, 4, 7]
+                return $ NoteEvent (pitch %~ (ch +) $ n)
+        tell $ def { _events = nes }
+    , mkStdOp "Minor" 'm' "Pop x. Play minor chord of pitch x." $ do
+        nb <- use noteBuf
+        n <- case nb of
+            Nothing -> dieError "Can't play empty note" def
+            (Just n) -> return n
+        let nes = do
+                ch <- [0, 3, 7]
+                return $ NoteEvent (pitch %~ (ch +) $ n)
+        tell $ def { _events = nes }
+    , mkStdOp "Major7" 'L' "Pop x. Play major 7th chord of pitch x." $ do
+        nb <- use noteBuf
+        n <- case nb of
+            Nothing -> dieError "Can't play empty note" def
+            (Just n) -> return n
+        let nes = do
+                ch <- [0, 4, 7, 11]
+                return $ NoteEvent (pitch %~ (ch +) $ n)
+        tell $ def { _events = nes }
+    , mkStdOp "Minor7" 'l' "Pop x. Play minor 7th chord of pitch x." $ do
+        nb <- use noteBuf
+        n <- case nb of
+            Nothing -> dieError "Can't play empty note" def
+            (Just n) -> return n
+        let nes = do
+                ch <- [0, 3, 7, 11]
+                return $ NoteEvent (pitch %~ (ch +) $ n)
+        tell $ def { _events = nes }
+    , mkStdOp "Write(Note)" 'z' "Pop dur vel pch cha. Write note buffer." $ do
+        dur <- popOp
+        vel <- popOp
+        pit <- popOp
+        cha <- popOp
+        noteBuf .= Just (Note cha pit vel dur)
+    , mkStdOp "Play(Note)" 'Z' "Play the note in the note buffer." $ do
+        nb <- use noteBuf
+        ne <- case nb of
+            Nothing -> dieError "Can't play empty note" (NoteEvent def)
+            (Just n) -> return $ NoteEvent n
+        tell $ def { _events = [ne] }
+    , mkStdOp "Write(Cha)" 'y'
+        "Pop x. Write x as the note buffer channel." $ do
+        writeNoteBuf channel
+    , mkStdOp "Read(Cha)" 'Y'
+        "Push the channel from the note buffer." $ do
+        readNoteBuf channel
+    , mkStdOp "Write(Pch)" 'x'
+        "Pop x. Write x as the note buffer pitch." $ do
+        writeNoteBuf channel
+    , mkStdOp "Read(Pch)" 'X'
+        "Push the pitch from the note buffer." $ do
+        readNoteBuf channel
+    , mkStdOp "Write(Vel)" 'w'
+        "Pop x. Write x as the note buffer veloctiy." $ do
+        writeNoteBuf channel
+    , mkStdOp "Read(Vel)" 'W'
+        "Push the velocity from the note buffer." $ do
+        readNoteBuf channel
+    , mkStdOp "Write(Dur)" 'u'
+        "Pop x. Write x as the note buffer duration." $ do
+        writeNoteBuf channel
+    , mkStdOp "Read(Dur)" 'U'
+        "Push the duration from the note buffer." $ do
+        readNoteBuf channel
+    , mkStdOp "End" '@' "Terminate the thread." $ do
+        lift $ end
+    ]
+  where mkStdOp n c d f = (fromIntegral $ ord c, Operator n c d f)
+        readNoteBuf l = do
+            nb <- use noteBuf
+            nt <- maybe (dieError "Can't read from empty note" def) return nb
+            pushOp (nt^.l)
+        writeNoteBuf l = do
+            val <- popOp
+            nb <- use noteBuf
+            nt <- maybe (dieError "Can't read from empty note" def) return nb
+            noteBuf .= Just (set l val nt)
 
 operators :: OpSet
 operators = OpSet $ Arr.array (0,255) $ do
     i <- [0..255]
-    return (i, stdOp i)
+    return (i, (^.opCode) <$> stdOps^.(at i))
 
 runOp :: Word8 -> Fungine ()
 runOp c = do
@@ -481,17 +438,4 @@ runOp c = do
     case ops ! c of
         Nothing -> dieError ("Unknown operator " ++ show c) ()
         Just op' -> op'
-
-readNoteBuf :: Simple Lens Note Word8 -> Fungine ()
-readNoteBuf l = do
-    nb <- use noteBuf
-    nt <- maybe (dieError "Can't read from empty note" def) return nb
-    pushOp (nt^.l)
-
-writeNoteBuf :: Simple Lens Note Word8 -> Fungine ()
-writeNoteBuf l = do
-    val <- popOp
-    nb <- use noteBuf
-    nt <- maybe (dieError "Can't read from empty note" def) return nb
-    noteBuf .= Just (set l val nt)
 

@@ -115,3 +115,14 @@ executable nfkill
 
   Ghc-options:       -Wall -O3 -threaded 
 
+executable nfops
+  hs-source-dirs: nfops
+  main-is: nfops.hs
+
+  build-depends: base >= 4 && < 5,
+                 noisefunge,
+                 lens,
+                 containers
+
+  Ghc-options:       -Wall -O3 -threaded 
+

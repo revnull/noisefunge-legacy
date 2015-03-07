@@ -37,6 +37,9 @@ module Language.NoiseFunge.Befunge.Process (ProgArray, makeProgArray,
                                             Deltas, ProcessStats,
                                             psTicks, psStackSize,
                                             psQuote,
+                                            Operator(..),
+                                            opCode, opChar,
+                                            opName, opDesc,
                                             OpSet(..),
                                             processStats
                                             ) where
@@ -174,6 +177,12 @@ data OperatorParams = OperatorParams {
 instance Default OperatorParams where
     def = OperatorParams True False False
 
+data Operator = Operator {
+    _opName :: String,
+    _opChar :: Char,
+    _opDesc :: String,
+    _opCode :: (Fungine ())
+  }
 
 newtype OpSet = OpSet { getOpSet :: Arr.Array Word8 (Maybe (Fungine ())) }
 
@@ -192,6 +201,8 @@ type FungeProgram = Program Word8 ProcessState FungeRWS
 $(makeLenses ''ProcessState)
 $(makeLenses ''Delta)
 $(makeLenses ''PC)
+$(makeLenses ''Operator)
+
 
 data ProcessStats = PStats {
         _psTicks     :: Word32,
