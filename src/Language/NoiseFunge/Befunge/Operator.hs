@@ -87,13 +87,13 @@ move = do
         else return 1
     (_,bnds) <- bounds `fmap` use mem
     c@(PC _ d) <- use pc
-    hal <- asks haltOnEdge
+    hal <- asks wrapOnEdge
     let p' = boundedStep bnds sd c
     p'' <- case (hal, p') of
-        (False, Left p'') -> return p''
-        (False, Right p'') -> return p''
+        (True, Left p'') -> return p''
         (True, Right p'') -> return p''
-        (True, Left p'') -> dieError "Exceeded memory bounds" p''
+        (False, Right p'') -> return p''
+        (False, Left p'') -> dieError "Exceeded memory bounds" p''
     pc.pos .= p''
     tell $ def { _oldpc = Just c, _newpc = Just (PC p'' d) }
 

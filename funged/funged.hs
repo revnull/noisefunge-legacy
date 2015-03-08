@@ -62,7 +62,7 @@ parseConf conf = sc where
         <$> get conf "DEFAULT" "beats"
         <*> get conf "DEFAULT" "subbeats"
     parseOpParams = OperatorParams
-        <$> get conf "DEFAULT" "ignoreerror"
+        <$> not <$> get conf "DEFAULT" "ignoreerror"
         <*> get conf "DEFAULT" "wrap"
         <*> get conf "DEFAULT" "debug"
 

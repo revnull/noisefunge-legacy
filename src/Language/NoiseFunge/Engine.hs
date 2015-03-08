@@ -33,7 +33,6 @@ import qualified Control.Monad.State as S
 import Control.Monad.Trans
 import Control.Monad.Writer
 
-import Data.Default
 import Data.Maybe
 import Data.Word
 
@@ -53,10 +52,10 @@ $(makeLenses ''NoiseFungeEngine)
 beatVar :: Getter NoiseFungeEngine (TVar Beat) 
 beatVar = alsaThread.clock
 
-initNF :: Tempo -> IO NoiseFungeEngine
-initNF tempo = do
+initNF :: Tempo -> OperatorParams -> IO NoiseFungeEngine
+initNF tempo pars = do
     alsa <- startALSAThread tempo
-    bft <- startBefungeThread tempo def
+    bft <- startBefungeThread tempo pars
     let nfe = NFE alsa bft
     void . forkIO $ beatStateHandler (alsa^.clock) $ \nextBeat -> do
         liftIO . atomically $ do

@@ -116,7 +116,7 @@ runServer :: ServerConfig -> IO ()
 runServer conf = do
     let nextB = (serverTempo conf ##)
         bufferB = bufferBinary (serverPacketSize conf)
-    nfe <- initNF (serverTempo conf)
+    nfe <- initNF (serverTempo conf) (serverVMOptions conf)
     servs <- forM (serverHosts conf) $ \(fam, addr) -> do
         s <- socket fam Datagram defaultProtocol
         bindSocket s addr

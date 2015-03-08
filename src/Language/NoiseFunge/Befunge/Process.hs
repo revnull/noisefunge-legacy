@@ -170,7 +170,7 @@ makeProcessState arr inp outp =
 
 data OperatorParams = OperatorParams {
     haltOnError :: Bool,
-    haltOnEdge :: Bool,
+    wrapOnEdge :: Bool,
     debugLogging :: Bool
   } deriving (Read, Show, Eq, Ord)
 
