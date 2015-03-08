@@ -203,20 +203,30 @@ stdOps = M.fromList $ [
         y <- popOp
         x <- popOp
         arr <- use mem
-        pushOp (arr ! (y,x))
+        let tup = (y, x)
+        if inRange (bounds arr) tup
+            then pushOp (arr ! tup)
+            else dieError "g Outside of range." ()
     , mkStdOp "Put" 'p' "Pop y, x, and v. Write v to (y,x)" $ do
         y <- popOp
         x <- popOp
         v <- popOp
         arr <- use mem
-        let arr' = arr // [((y,x),v)]
-        mem .= arr'
-        tellMem
+        let arr' = arr // [(tup, v)]
+            tup = (y, x)
+        if inRange (bounds arr) tup
+            then do
+                mem .= arr'
+                tellMem
+            else dieError "p Outside of range." ()
     , mkStdOp "Call" 'c' "Pop y and x. Run opcode at (y,x)" $ do
         y <- popOp
         x <- popOp
         arr <- use mem
-        runOp (arr ! (y,x))
+        let tup = (y, x)
+        if inRange (bounds arr) tup
+            then runOp (arr ! (y,x))
+            else dieError "c Outside of range." ()
     , mkStdOp "Quantize" 'q' "Wait for the next beat" $ do
         let quant = do
                 bt <- getTime
@@ -232,7 +242,9 @@ stdOps = M.fromList $ [
                 if (bt^.subbeat) == 0 && (bt^.beat) `mod` x == 0
                     then return ()
                     else yield >> quant
-        lift quant
+        if x == 0
+            then dieError "Can't quantize on 0 beats." ()
+            else lift quant
     , mkStdOp "Sleep" 's' "Pop x. Sleep for x subbeats." $ do
         x <- popOp
         forM_ [1..x] $ const (lift yield)
