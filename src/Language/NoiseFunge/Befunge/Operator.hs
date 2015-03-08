@@ -409,22 +409,22 @@ stdOps = M.fromList $ [
         readNoteBuf channel
     , mkStdOp "Write(Pch)" 'x'
         "Pop x. Write x as the note buffer pitch." $ do
-        writeNoteBuf channel
+        writeNoteBuf pitch
     , mkStdOp "Read(Pch)" 'X'
         "Push the pitch from the note buffer." $ do
-        readNoteBuf channel
+        readNoteBuf pitch
     , mkStdOp "Write(Vel)" 'w'
         "Pop x. Write x as the note buffer veloctiy." $ do
-        writeNoteBuf channel
+        writeNoteBuf velocity
     , mkStdOp "Read(Vel)" 'W'
         "Push the velocity from the note buffer." $ do
-        readNoteBuf channel
+        readNoteBuf velocity
     , mkStdOp "Write(Dur)" 'u'
         "Pop x. Write x as the note buffer duration." $ do
-        writeNoteBuf channel
+        writeNoteBuf duration
     , mkStdOp "Read(Dur)" 'U'
         "Push the duration from the note buffer." $ do
-        readNoteBuf channel
+        readNoteBuf duration
     , mkStdOp "End" '@' "Terminate the thread." $ do
         lift $ end
     ]
