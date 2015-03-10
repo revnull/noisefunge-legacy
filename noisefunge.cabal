@@ -38,7 +38,7 @@ library
                      binary >= 0.7,
                      ConfigFile
                      
-  Ghc-options:       -Wall -O3 -threaded
+  Ghc-options:       -Wall -O2 -threaded
 
 executable funged
   hs-source-dirs: funged
@@ -52,7 +52,7 @@ executable funged
                  network,
                  ConfigFile
 
-  Ghc-options:       -Wall -O3 -threaded 
+  Ghc-options:       -Wall -O2 -threaded 
 
 executable nfviewer
   hs-source-dirs: nfviewer
@@ -69,7 +69,7 @@ executable nfviewer
                  random,
                  containers
 
-  Ghc-options:       -Wall -O3 -threaded 
+  Ghc-options:       -Wall -O2 -threaded 
 
 executable nftop
   hs-source-dirs: nftop
@@ -85,7 +85,7 @@ executable nftop
                  data-default,
                  containers
 
-  Ghc-options:       -Wall -O3 -threaded 
+  Ghc-options:       -Wall -O2 -threaded 
 
 executable nfloader
   hs-source-dirs: nfloader
@@ -99,7 +99,7 @@ executable nfloader
                  lens,
                  containers
 
-  Ghc-options:       -Wall -O3 -threaded 
+  Ghc-options:       -Wall -O2 -threaded 
 
 executable nfkill
   hs-source-dirs: nfkill
@@ -113,7 +113,7 @@ executable nfkill
                  containers,
                  optparse-applicative
 
-  Ghc-options:       -Wall -O3 -threaded 
+  Ghc-options:       -Wall -O2 -threaded 
 
 executable nfops
   hs-source-dirs: nfops
@@ -124,5 +124,5 @@ executable nfops
                  lens,
                  containers
 
-  Ghc-options:       -Wall -O3 -threaded 
+  Ghc-options:       -Wall -O2 -threaded 
 
