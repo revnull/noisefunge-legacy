@@ -128,3 +128,38 @@ buffer.
 
 - `'` pops a value and jumps over the next opcode iff the value is 0.
 
+### Quantize and sleep
+
+- `q` sleeps until the next beat is reached.
+- `Q` pops a value and sleeps until a beat divisible by the popped number.
+- `s` pops a number and sleeps for that many subbeats.
+
+### User-defined opcodes
+
+The `[` opcode work similar to the quote operator. `[` causes bytes to
+be pushed onto a "function definition stack". Another `[` pops the first
+value off of the function definition stack and uses this as the name of the
+opcode being defined. The rest of the items in the stack become the opcodes
+used by the function *in the order they are popped off of the stack*.
+
+Some examples:
+
+- `[x*5Cc[` defines the opcode `c` that writes middle C to the note buffer
+- `[*:p[` defines the opcode `p` that squares the top value on the stack
+
+Function definition is global. A function defined in one thread will be
+visible to another thread. This can lead to interesting behavior when
+multiple threads are rewring a function. This also makes functions another
+type of RPC supported by NoiseFunge.
+
+The semantics of this feature are pretty poorly thought out and some
+combinations may lead to bizarre or unpredictable behavior. Some notes are
+listed below.
+
+- Opcode definitions are computed as soon as the second `[` is encountered. At
+this point, the opcode is defined based on the function of the opcodes at the
+point when it is defined.
+- User-defined opcodes execute in a single clock tick. Exceptions are opcodes
+that utilize the quantize/sleep opcodes: `q`, `Q`, and `s`.
+- `'` and `#` will take effect at the end of the execution of the opcode.
+- Builtin opcodes can be overwritten for exciting results.

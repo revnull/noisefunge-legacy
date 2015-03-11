@@ -107,7 +107,7 @@ quoteOp 0x22 = quote .= False
 quoteOp x = pushOp x
 
 fnStackOp :: Word8 -> Fungine ()
-fnStackOp 0x5d = do
+fnStackOp 0x5b = do
     Just ops <- use fnStack
     OpSet arr <- lift . lift $ get
     case ops of
@@ -259,10 +259,8 @@ stdOps = M.fromList $ [
         jump .= True
     , mkStdOp "Quote" '"' "Start/Stop quote mode." $ do       
         quote .= True
-    , mkStdOp "Defun" '[' "Start a function definition." $ do
+    , mkStdOp "Defun" '[' "Start/Stop a function definition." $ do
         fnStack .= Just []
-    , mkStdOp "Defun(end)" ']' "End a function definition." $ do
-        dieError "Not defining a function." ()
     , mkStdOp "Dup" ':' "Duplicate the top object on the stack." $ do
         a <- popOp
         pushOp a
