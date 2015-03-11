@@ -227,6 +227,9 @@ stdOps = M.fromList $ [
         if inRange (bounds arr) tup
             then runOp (arr ! (y,x))
             else dieError "c Outside of range." ()
+    , mkStdOp "Execute" 'e' "Pop x and run the corresponding opcode." $ do
+        x <- popOp
+        runOp x
     , mkStdOp "Quantize" 'q' "Wait for the next beat" $ do
         let quant = do
                 bt <- getTime

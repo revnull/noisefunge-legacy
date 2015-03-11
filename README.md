@@ -91,6 +91,10 @@ The `c` opcode is similar to the `g` opcode, but instead of accessing a byte
 from memory and pushing it onto the stack, the `c` opcode instead executes
 that byte as an opcode.
 
+### Execute
+
+The `e` opcode pops a value off of the stack and executes it as an opcode.
+
 ### I/O and buffers
 
 NoiseFunge utilizes a non-standard form of input and output. Each process is
