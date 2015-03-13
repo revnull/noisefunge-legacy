@@ -113,7 +113,7 @@ befungeRunner temp params bfth = forever $ readIn >>= handle where
             let (vm', ops', ds) = runRWS (advance bt vm) params ops
                 dead = [(pid, msg) | (pid, msg, _) <- vm'^.deadProcesses]
                 vmstats = fmap (^.processStats) <$> vm'^.vmStats
-            seq (length vmstats) $ liftIO . atomically $
+            liftIO . atomically $
                 writeTChan dout (bt, (ds []), dead, vmstats)
             bfsVM .= vm'
             bfsOps .= ops'

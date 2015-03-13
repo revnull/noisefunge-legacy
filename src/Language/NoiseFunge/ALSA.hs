@@ -28,8 +28,10 @@ import Control.Concurrent.STM
 import Control.Lens
 import Control.Monad
 
+import Data.Array
 import Data.Default
 import Data.Ratio
+import Data.Word
 
 import qualified Sound.ALSA.Sequencer as Seq
 import qualified Sound.ALSA.Sequencer.Address as Addr
@@ -76,23 +78,31 @@ alsaHandler :: Tempo -> TVar Beat -> TChan (Beat, Note) -> TChan (Beat, Note)
 alsaHandler tempo@(Tempo tb ts) clockv _ noteout h = do 
     getProgName >>= Client.setName h
 
-    ioport <- Port.createSimple h "io"
-        (Port.caps [Port.capRead, Port.capSubsRead,
-                    Port.capWrite, Port.capSubsWrite])
-        (Port.types [Port.typeMidiGeneric, Port.typeApplication])
+    c <- Client.getId h
     q <- Queue.alloc h
-    PortInfo.modify h ioport $ do
-        PortInfo.setTimestamping True
-        PortInfo.setTimestampReal True
-        PortInfo.setTimestampQueue q
+    ioaddrs <- (listArray (0,15) <$>) . forM [0..15] $ \i -> do
+        let name = "channels " ++ show minb ++ "-" ++ show maxb
+            minb :: Word8
+            minb = i * 16
+            maxb = minb + 15
+        ioport <- Port.createSimple h name
+            (Port.caps [Port.capRead, Port.capSubsRead])
+            (Port.types [Port.typeMidiGeneric, Port.typeApplication])
+        PortInfo.modify h ioport $ do
+            PortInfo.setTimestamping True
+            PortInfo.setTimestampReal True
+            PortInfo.setTimestampQueue q
+        return $ Addr.Cons c ioport
 
     priv <- Port.createSimple h "priv"
         (Port.caps [Port.capRead, Port.capWrite])
         (Port.types [Port.typeMidiGeneric])
+    PortInfo.modify h priv $ do
+        PortInfo.setTimestamping True
+        PortInfo.setTimestampReal True
+        PortInfo.setTimestampQueue q
 
-    c <- Client.getId h
-    let ioaddr   = Addr.Cons c ioport
-        praddr   = Addr.Cons c priv
+    let praddr   = Addr.Cons c priv
         ticktime = fromIntegral ((3000000000 :: Integer) `div`
                                  (fromIntegral (tb * ts)))
         timefn   = Time.consAbs . Time.Real . beatTime tempo
@@ -100,13 +110,13 @@ alsaHandler tempo@(Tempo tb ts) clockv _ noteout h = do
     Queue.control h q (Event.QueueTempo (Event.Tempo ticktime)) Nothing
     Queue.control h q Event.QueueStart Nothing
 
-    let echo bt@(Beat b s) = void . Event.output h $ (Event.simple ioaddr
+    let echo bt@(Beat b s) = void . Event.output h $ (Event.simple praddr
             (Event.CustomEv Event.Echo $ Event.Custom b s 0)) {
                 Event.time = timefn bt,
                 Event.dest = praddr,
                 Event.queue = q
             }
-    let play b ev = void . Event.output h $ (Event.simple ioaddr ev) {
+    let play addr b ev = void . Event.output h $ (Event.simple addr ev) {
                 Event.time = timefn b,
                 Event.dest = Addr.subscribers,
                 Event.queue = q
@@ -116,12 +126,14 @@ alsaHandler tempo@(Tempo tb ts) clockv _ noteout h = do
     let loopEvents = do
             notes <- atomically $ drainTChan noteout
             forM_ notes $ \(b@(Beat x y), n) -> do
-                let ne = Event.simpleNote (Event.Channel $ n^.channel)
+                let ne = Event.simpleNote (Event.Channel chan)
                         (Event.Pitch $ n^.pitch) (Event.Velocity $ n^.velocity)
+                    (port, chan) = (n^.channel) `divMod` 16
                     nton = Event.NoteEv Event.NoteOn ne
                     ntof = Event.NoteEv Event.NoteOff ne
-                play b nton
-                play (Beat (x + fromIntegral (n^.duration)) y) ntof
+                    addr = ioaddrs ! port
+                play addr b nton
+                play addr (Beat (x + fromIntegral (n^.duration)) y) ntof
             _ <- Event.drainOutput h
             event <- Event.input h
             case Event.body event of

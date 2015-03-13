@@ -40,7 +40,7 @@ $(makeLenses ''Tempo)
 data Beat = Beat {
     _beat :: Word32,
     _subbeat :: Word32
-  } deriving (Read, Show, Eq, Ord)
+  } deriving (Read, Eq, Ord)
 
 $(makeLenses ''Beat)
 
@@ -50,6 +50,9 @@ instance Binary Beat where
 
 instance Default Beat where
     def = Beat 0 0
+
+instance Show Beat where
+    show (Beat x y) = shows x . showChar '|' . shows y $ []
 
 type Beats = [Beat]
 
