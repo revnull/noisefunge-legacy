@@ -154,7 +154,7 @@ Some examples:
 Function definition is global. A function defined in one thread will be
 visible to another thread. This can lead to interesting behavior when
 multiple threads are rewring a function. This also makes functions another
-type of RPC supported by NoiseFunge.
+type of IPC supported by NoiseFunge.
 
 The semantics of this feature are pretty poorly thought out and some
 combinations may lead to bizarre or unpredictable behavior. Some notes are
