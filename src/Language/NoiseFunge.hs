@@ -25,7 +25,7 @@ module Language.NoiseFunge (Tempo(..), bpm, subbeats,
                             opName, opChar, opDesc,
                             stdOps,
                             ALSAPort(ALSAPort), portConnection,
-                            portStarting, portPatches,
+                            portStarting,
                             runServer) where
 
 import Language.NoiseFunge.ALSA

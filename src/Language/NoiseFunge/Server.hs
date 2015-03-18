@@ -116,6 +116,7 @@ requestHandler s nfe stats delts = forever $ do
 
 runServer :: ServerConfig -> IO ()
 runServer conf = do
+    hSetBuffering stderr LineBuffering
     let nextB = (serverTempo conf ##)
         bufferB = bufferBinary (serverPacketSize conf)
     nfe <- initNF (serverTempo conf) (serverPorts conf) (serverVMOptions conf)

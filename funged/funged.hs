@@ -65,8 +65,7 @@ parseConf conf = sc where
     parsePorts = forM ports $ \sect -> do
         conn <- Just <$> get conf sect "connection" <|> return Nothing
         chan <- get conf sect "starting_channel" <|> return 0
-        patches <- return M.empty -- TODO
-        return (sect, ALSAPort conn chan patches)
+        return (sect, ALSAPort conn chan)
     parseTempo = Tempo
         <$> get conf "DEFAULT" "beats"
         <*> get conf "DEFAULT" "subbeats"
@@ -83,8 +82,8 @@ Right defaultConf = defConf where
         setDef "DEFAULT" "ignoreerror" "False" >>=
         setDef "DEFAULT" "wrap" "False" >>=
         setDef "DEFAULT" "debug" "False" >>=
-        addSec "port" >>=
-        setDef "port" "starting_channel" "0"
+        addSec "port0" >>=
+        setDef "port0" "starting_channel" "0"
     setDef s k v cp = set cp s k v
     addSec n cp = add_section cp n
 

@@ -20,13 +20,14 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Language.NoiseFunge.ALSA (startALSAThread, ALSAThread,
                                  ALSAPort(ALSAPort), portConnection,
-                                 portStarting, portPatches,
+                                 portStarting,
                                  tid, clock, inEvents,
                                  outEvents) where
 
 import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.STM
+import Control.Exception
 import Control.Lens
 import Control.Monad
 
@@ -37,9 +38,11 @@ import Data.Monoid
 import Data.Ratio
 import Data.Word
 
+import qualified Sound.ALSA.Exception as Exc
 import qualified Sound.ALSA.Sequencer as Seq
 import qualified Sound.ALSA.Sequencer.Address as Addr
 import qualified Sound.ALSA.Sequencer.Client as Client
+import qualified Sound.ALSA.Sequencer.Connect as Conn
 import qualified Sound.ALSA.Sequencer.Event as Event
 import qualified Sound.ALSA.Sequencer.Port as Port
 import qualified Sound.ALSA.Sequencer.Port.InfoMonad as PortInfo
@@ -51,11 +54,13 @@ import Language.NoiseFunge.Beat
 import Language.NoiseFunge.Note
 
 import System.Environment
+import System.IO
+
+import Text.Printf
 
 data ALSAPort = ALSAPort {
     _portConnection :: Maybe String,
-    _portStarting   :: Word8,
-    _portPatches    :: M.Map Word8 (Word32, Word32)
+    _portStarting   :: Word8
     } deriving (Show, Eq, Ord)
 
 $(makeLenses ''ALSAPort)
@@ -85,8 +90,9 @@ startALSAThread tempo ports = do
     th <- forkIO $ Seq.withDefault Seq.Block handler
     return $ ALSAThread th cl nin nout
 
-createPorts :: M.Map String ALSAPort -> Seq.T Seq.DuplexMode -> Client.T -> 
-    Queue.T -> IO (Array Word8 [(Addr.T, Word8)])
+createPorts :: M.Map String ALSAPort ->
+    Seq.T Seq.DuplexMode -> Client.T -> Queue.T ->
+    IO (Array Word8 [(Addr.T, Word8)])
 createPorts ports h c q = arrfn <$> portSets where
     arrfn = array (0, 255) . M.toList .
         M.unionWith (<>) blank . M.unionsWith (<>)
@@ -100,10 +106,24 @@ createPorts ports h c q = arrfn <$> portSets where
             PortInfo.setTimestamping True
             PortInfo.setTimestampReal True
             PortInfo.setTimestampQueue q
+        let conn = port^.portConnection
+        flip Exc.catch (void . forkIO . badConn ioport conn) $
+            connectRemote ioport conn
         let addr = Addr.Cons c ioport
         return $ M.fromList $ do
             i <- [0..15]
             return (i + minb, [(addr, i)])
+    connectRemote _ Nothing = return ()
+    connectRemote ioport (Just conn) = do
+        remote <- Addr.parse h conn
+        void $ Conn.createTo h ioport remote
+    badConn _ Nothing _ = return () -- Should be unreachable
+    badConn ioport jst@(Just conn) e = do
+        hPutStrLn stderr $ printf "Error connecting to ALSA port: %s - %s"
+            conn (show e)
+        threadDelay 60000000
+        handle (badConn ioport jst) $
+            connectRemote ioport jst
 
 alsaHandler :: Tempo -> M.Map String ALSAPort -> TVar Beat ->
     TChan (Beat, Note) -> TChan (Beat, Note) -> Seq.T Seq.DuplexMode ->
@@ -113,6 +133,7 @@ alsaHandler tempo@(Tempo tb ts) ports clockv _ noteout h = do
 
     c <- Client.getId h
     q <- Queue.alloc h
+
     ioports <- createPorts ports h c q
 
     priv <- Port.createSimple h "priv"
@@ -167,6 +188,8 @@ alsaHandler tempo@(Tempo tb ts) ports clockv _ noteout h = do
                     atomically $ writeTVar clockv curr
                     echo next
                     return ()
+                Event.ConnEv x y -> do
+                    hPutStrLn stderr $ printf "Connected: %s - %s" (show x) (show y)
                 _ -> return ()
             loopEvents
     echo def
