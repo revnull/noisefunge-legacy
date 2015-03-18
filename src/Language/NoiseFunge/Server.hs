@@ -42,6 +42,7 @@ import qualified Data.ByteString as BS
 
 import System.IO
 
+import Language.NoiseFunge.ALSA
 import Language.NoiseFunge.Beat
 import Language.NoiseFunge.Befunge
 import Language.NoiseFunge.Befunge.VM
@@ -51,6 +52,7 @@ import Language.NoiseFunge.Server.Comm
 
 data ServerConfig = ServerConfig {
         serverHosts :: [(Family, SockAddr)],
+        serverPorts :: M.Map String ALSAPort,
         serverTempo :: Tempo,
         serverVMOptions :: OperatorParams,
         serverPacketSize :: Word16
@@ -116,7 +118,7 @@ runServer :: ServerConfig -> IO ()
 runServer conf = do
     let nextB = (serverTempo conf ##)
         bufferB = bufferBinary (serverPacketSize conf)
-    nfe <- initNF (serverTempo conf) (serverVMOptions conf)
+    nfe <- initNF (serverTempo conf) (serverPorts conf) (serverVMOptions conf)
     servs <- forM (serverHosts conf) $ \(fam, addr) -> do
         s <- socket fam Datagram defaultProtocol
         bindSocket s addr

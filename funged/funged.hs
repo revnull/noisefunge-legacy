@@ -17,7 +17,7 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 -}
 
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, TupleSections #-}
 
 import Control.Applicative
 import Control.Monad
@@ -26,6 +26,7 @@ import Control.Monad.Error
 import Control.Monad.Identity
 
 import Data.ConfigFile as CF
+import qualified Data.Map as M
 import Network.Socket
 
 import System.Environment
@@ -42,22 +43,30 @@ getConfFile = do
         ([], Just env') -> return env'
         _ -> fail "No config file"
 
-parseConf :: (MonadError CPError m, Functor m, Applicative m, MonadIO m) =>
-    ConfigParser -> m ServerConfig
+parseConf :: (MonadError CPError m, Functor m, Applicative m, MonadIO m,
+    Alternative m) => ConfigParser -> m ServerConfig
 parseConf conf = sc where
     sc = ServerConfig <$>
         (concat <$> parseHosts) <*>
+        (M.fromList <$> parsePorts) <*>
         parseTempo <*>
         parseOpParams <*>
         get conf "DEFAULT" "packet_size"
-
-    parseHosts = forM (sections conf) $ \sect -> do
+ 
+    servers = [srv | srv <- sections conf, "server" == take 6 srv]
+    parseHosts = forM servers $ \sect -> do
         h <- get conf sect "host"
         p <- get conf sect "port"
         let hints = Just defaultHints {addrSocketType = Datagram }
         ais <- liftIO $ getAddrInfo hints (Just h) (Just p)
         forM ais $ \ai -> do
             return (addrFamily ai, addrAddress ai)
+    ports = [prt | prt <- sections conf, "port" == take 4 prt]
+    parsePorts = forM ports $ \sect -> do
+        conn <- Just <$> get conf sect "connection" <|> return Nothing
+        chan <- get conf sect "starting_channel" <|> return 0
+        patches <- return M.empty -- TODO
+        return (sect, ALSAPort conn chan patches)
     parseTempo = Tempo
         <$> get conf "DEFAULT" "beats"
         <*> get conf "DEFAULT" "subbeats"
@@ -67,11 +76,17 @@ parseConf conf = sc where
         <*> get conf "DEFAULT" "debug"
 
 defaultConf :: ConfigParser
-Right defaultConf = runIdentity $ runErrorT $ do
-    cp <- set emptyCP "DEFAULT" "packet_size" "4096"
-    cp' <- set cp "DEFAULT" "ignoreerror" "False"
-    cp'' <- set cp' "DEFAULT" "wrap" "False"
-    set cp'' "DEFAULT" "debug" "False"
+Right defaultConf = defConf where
+    defConf = runIdentity $ runErrorT $
+        return emptyCP >>=
+        setDef "DEFAULT" "packet_size" "4096" >>=
+        setDef "DEFAULT" "ignoreerror" "False" >>=
+        setDef "DEFAULT" "wrap" "False" >>=
+        setDef "DEFAULT" "debug" "False" >>=
+        addSec "port" >>=
+        setDef "port" "starting_channel" "0"
+    setDef s k v cp = set cp s k v
+    addSec n cp = add_section cp n
 
 main :: IO ()
 main = do

@@ -47,6 +47,7 @@ executable funged
                  noisefunge,
                  mtl,
                  array,
+                 containers,
                  transformers,
                  ncurses,
                  network,

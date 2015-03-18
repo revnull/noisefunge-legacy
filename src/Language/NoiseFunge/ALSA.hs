@@ -19,6 +19,8 @@
 
 {-# LANGUAGE TemplateHaskell #-}
 module Language.NoiseFunge.ALSA (startALSAThread, ALSAThread,
+                                 ALSAPort(ALSAPort), portConnection,
+                                 portStarting, portPatches,
                                  tid, clock, inEvents,
                                  outEvents) where
 
@@ -30,6 +32,8 @@ import Control.Monad
 
 import Data.Array
 import Data.Default
+import qualified Data.Map as M
+import Data.Monoid
 import Data.Ratio
 import Data.Word
 
@@ -48,6 +52,14 @@ import Language.NoiseFunge.Note
 
 import System.Environment
 
+data ALSAPort = ALSAPort {
+    _portConnection :: Maybe String,
+    _portStarting   :: Word8,
+    _portPatches    :: M.Map Word8 (Word32, Word32)
+    } deriving (Show, Eq, Ord)
+
+$(makeLenses ''ALSAPort)
+
 data ALSAThread = ALSAThread {
     _tid       :: ThreadId,
     _clock     :: TVar Beat,
@@ -64,27 +76,23 @@ beatTime (Tempo tb ts) (Beat b s) = rt where
     rt = RealTime.fromFractional (perbeat * bt)
     bt = (fromIntegral $ b * ts + s) % 1
 
-startALSAThread :: Tempo -> IO ALSAThread
-startALSAThread tempo = do
+startALSAThread :: Tempo -> M.Map String ALSAPort -> IO ALSAThread
+startALSAThread tempo ports = do
     cl  <- newTVarIO def
     nin <- newTChanIO
     nout <- newTChanIO
-    let handler = alsaHandler tempo cl nin nout
+    let handler = alsaHandler tempo ports cl nin nout
     th <- forkIO $ Seq.withDefault Seq.Block handler
     return $ ALSAThread th cl nin nout
 
-alsaHandler :: Tempo -> TVar Beat -> TChan (Beat, Note) -> TChan (Beat, Note)
-    -> (Seq.T Seq.DuplexMode) -> IO ()
-alsaHandler tempo@(Tempo tb ts) clockv _ noteout h = do 
-    getProgName >>= Client.setName h
-
-    c <- Client.getId h
-    q <- Queue.alloc h
-    ioaddrs <- (listArray (0,15) <$>) . forM [0..15] $ \i -> do
-        let name = "channels " ++ show minb ++ "-" ++ show maxb
-            minb :: Word8
-            minb = i * 16
-            maxb = minb + 15
+createPorts :: M.Map String ALSAPort -> Seq.T Seq.DuplexMode -> Client.T -> 
+    Queue.T -> IO (Array Word8 [(Addr.T, Word8)])
+createPorts ports h c q = arrfn <$> portSets where
+    arrfn = array (0, 255) . M.toList .
+        M.unionWith (<>) blank . M.unionsWith (<>)
+    blank = M.fromList [(i, []) | i <- [0..255]]
+    portSets = forM (M.toList ports) $ \(name, port) -> do
+        let minb = port^.portStarting
         ioport <- Port.createSimple h name
             (Port.caps [Port.capRead, Port.capSubsRead])
             (Port.types [Port.typeMidiGeneric, Port.typeApplication])
@@ -92,7 +100,20 @@ alsaHandler tempo@(Tempo tb ts) clockv _ noteout h = do
             PortInfo.setTimestamping True
             PortInfo.setTimestampReal True
             PortInfo.setTimestampQueue q
-        return $ Addr.Cons c ioport
+        let addr = Addr.Cons c ioport
+        return $ M.fromList $ do
+            i <- [0..15]
+            return (i + minb, [(addr, i)])
+
+alsaHandler :: Tempo -> M.Map String ALSAPort -> TVar Beat ->
+    TChan (Beat, Note) -> TChan (Beat, Note) -> Seq.T Seq.DuplexMode ->
+    IO ()
+alsaHandler tempo@(Tempo tb ts) ports clockv _ noteout h = do 
+    getProgName >>= Client.setName h
+
+    c <- Client.getId h
+    q <- Queue.alloc h
+    ioports <- createPorts ports h c q
 
     priv <- Port.createSimple h "priv"
         (Port.caps [Port.capRead, Port.capWrite])
@@ -125,15 +146,18 @@ alsaHandler tempo@(Tempo tb ts) clockv _ noteout h = do
 
     let loopEvents = do
             notes <- atomically $ drainTChan noteout
-            forM_ notes $ \(b@(Beat x y), n) -> do
-                let ne = Event.simpleNote (Event.Channel chan)
-                        (Event.Pitch $ n^.pitch) (Event.Velocity $ n^.velocity)
-                    (port, chan) = (n^.channel) `divMod` 16
-                    nton = Event.NoteEv Event.NoteOn ne
-                    ntof = Event.NoteEv Event.NoteOff ne
-                    addr = ioaddrs ! port
-                play addr b nton
-                play addr (Beat (x + fromIntegral (n^.duration)) y) ntof
+            let sendNotes = do
+                    (b@(Beat x y), n) <- notes
+                    (addr, chan) <- ioports ! (n^.channel)
+                    let ne = Event.simpleNote (Event.Channel chan)
+                            (Event.Pitch $ n^.pitch)
+                            (Event.Velocity $ n^.velocity)
+                        nton = play addr b $ Event.NoteEv Event.NoteOn ne
+                        endBeat = Beat (x + fromIntegral (n^.duration)) y
+                        ntof = play addr endBeat $
+                            Event.NoteEv Event.NoteOff ne
+                    [nton, ntof]
+            sequence_ sendNotes
             _ <- Event.drainOutput h
             event <- Event.input h
             case Event.body event of

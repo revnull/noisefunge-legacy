@@ -35,6 +35,7 @@ import Control.Monad.Writer
 
 import Data.Maybe
 import Data.Word
+import qualified Data.Map as M
 
 import Language.NoiseFunge.ALSA
 import Language.NoiseFunge.Beat
@@ -52,9 +53,10 @@ $(makeLenses ''NoiseFungeEngine)
 beatVar :: Getter NoiseFungeEngine (TVar Beat) 
 beatVar = alsaThread.clock
 
-initNF :: Tempo -> OperatorParams -> IO NoiseFungeEngine
-initNF tempo pars = do
-    alsa <- startALSAThread tempo
+initNF :: Tempo -> M.Map String ALSAPort -> OperatorParams ->
+    IO NoiseFungeEngine
+initNF tempo ports pars = do
+    alsa <- startALSAThread tempo ports
     bft <- startBefungeThread tempo pars
     let nfe = NFE alsa bft
     void . forkIO $ beatStateHandler (alsa^.clock) $ \nextBeat -> do
