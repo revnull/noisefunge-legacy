@@ -304,6 +304,12 @@ stdOps = M.fromList $ [
         if a == 0
             then pushOp 1
             else pushOp 0
+    , mkStdOp "Eq" '=' "Pop x and y. If x = y, push 1, else push 0." $ do
+        a <- popOp
+        b <- popOp
+        if b == a
+            then pushOp 1
+            else pushOp 0
     , mkStdOp "GT" '`' "Pop x and y. If y > x, push 1, else push 0." $ do
         a <- popOp
         b <- popOp
