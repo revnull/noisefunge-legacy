@@ -22,7 +22,6 @@ git clone https://github.com/revnull/noisefunge.git
 cd noisefunge
 
 cabal sandbox init
-cabal configure
 cabal build
 cabal install
 ```
