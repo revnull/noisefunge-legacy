@@ -32,7 +32,7 @@ module Language.NoiseFunge.Befunge.Process (ProgArray, makeProgArray,
                                             fnStack,
                                             noteBuf, ticks,
                                             OperatorParams(..),
-                                            Fungine, FungeVM, Fungoid,
+                                            Fungine, FungeVM,
                                             FungeProcess, FungeProgram,
                                             Deltas, ProcessStats,
                                             psTicks, psStackSize,
@@ -41,14 +41,14 @@ module Language.NoiseFunge.Befunge.Process (ProgArray, makeProgArray,
                                             opCode, opChar,
                                             opName, opDesc,
                                             OpSet(..),
-                                            processStats
+                                            processStats,
+                                            tellDelta, tellMem
                                             ) where
 
 import Control.Applicative
 import Control.Lens
 import Control.Monad
 import Control.Monad.RWS
-import Control.Monad.Writer
 
 import qualified Data.Array as Arr
 import Data.Array.Unboxed
@@ -188,9 +188,7 @@ newtype OpSet = OpSet { getOpSet :: Arr.Array Word8 (Maybe (Fungine ())) }
 
 type FungeRWS = RWS OperatorParams (Deltas ProcessState) OpSet
 
-type Fungoid = ProcessStateT Word8 ProcessState FungeRWS
-
-type Fungine = WriterT Delta Fungoid
+type Fungine = ProcessStateT Word8 ProcessState FungeRWS
 
 type FungeVM = VM Word8 ProcessState FungeRWS
 
@@ -203,12 +201,22 @@ $(makeLenses ''Delta)
 $(makeLenses ''PC)
 $(makeLenses ''Operator)
 
+tellDelta :: Delta -> Fungine ()
+tellDelta d = do
+    pid <- getPID
+    st <- getProcessState
+    tell ((pid, st, d):)
+
+tellMem :: Fungine ()
+tellMem = do
+    arr <- use mem
+    tellDelta $ Delta Nothing Nothing (Just arr) []
 
 data ProcessStats = PStats {
-        _psTicks     :: Word32,
-        _psStackSize :: Word32,
-        _psQuote     :: Bool
-    } deriving (Show, Eq, Ord)
+    _psTicks     :: Word32,
+    _psStackSize :: Word32,
+    _psQuote     :: Bool
+  } deriving (Show, Eq, Ord)
 
 $(makeLenses ''ProcessStats)
 

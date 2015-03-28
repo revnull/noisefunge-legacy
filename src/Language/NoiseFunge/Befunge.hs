@@ -36,6 +36,7 @@ import Control.Monad.Writer
 import Control.Monad.RWS
 
 import Data.Default
+import qualified Data.Map as M
 
 import Language.NoiseFunge.Beat
 import Language.NoiseFunge.Befunge.VM
@@ -44,7 +45,7 @@ import Language.NoiseFunge.Befunge.Operator
 
 type BefungeStats = VMStats ProcessStats
 
-tick :: Fungoid ()
+tick :: Fungine ()
 tick = do
     q <- use quote
     fs <- use fnStack
@@ -52,14 +53,8 @@ tick = do
             (True, _) -> quoteOp
             (_, Just _) -> fnStackOp
             _ -> runOp
-    first <- uses ticks (0 ==)
-    ((), w) <- runWriterT $ do
-        when first tellMem
-        getOp >>= opFn >> move
-    pid <- getPID
-    st  <- getProcessState
+    getOp >>= opFn >> move
     ticks += 1
-    lift . tell $ ((pid, st, w):)
     yield
 
 data BefungeCommand =
@@ -96,6 +91,13 @@ startBefungeThread temp params = do
     void . forkIO $ void $ runStateT (befungeRunner temp params bfth) bst
     return bfth
 
+flattenDeltas :: Deltas s -> [(PID, s, Delta)]
+flattenDeltas ds = trip <$> M.toList flat where
+    maps = [M.singleton p (s, d) | (p, s, d) <- ds []]
+    unionm (_, d1) (s, d2) = (s, d1 <> d2)
+    flat = foldr (M.unionWith unionm) M.empty maps
+    trip (a,(b,c)) = (a,b,c) 
+
 befungeRunner :: Tempo -> OperatorParams -> BefungeThread ->
     StateT BefungeState IO ()
 befungeRunner temp params bfth = forever $ readIn >>= handle where
@@ -114,7 +116,7 @@ befungeRunner temp params bfth = forever $ readIn >>= handle where
                 dead = [(pid, msg) | (pid, msg, _) <- vm'^.deadProcesses]
                 vmstats = fmap (^.processStats) <$> vm'^.vmStats
             liftIO . atomically $
-                writeTChan dout (bt, (ds []), dead, vmstats)
+                writeTChan dout (bt, (flattenDeltas ds), dead, vmstats)
             bfsVM .= vm'
             bfsOps .= ops'
         bfsLast .= btin
@@ -136,6 +138,8 @@ befungeRunner temp params bfth = forever $ readIn >>= handle where
                 writeQueue %= killall
 
 befungeProgram :: ProgArray -> String -> String -> FungeProgram
-befungeProgram arr inp out = program ps $ forever tick
+befungeProgram arr inp out = program ps $ do
+    tellMem
+    forever tick
   where ps = makeProcessState arr inp out
 

@@ -23,7 +23,7 @@ module Language.NoiseFunge.Befunge.Operator (OperatorParams(..),
                                              move, getOp, runOp, quoteOp,
                                              fnStackOp,
                                              stdOps,
-                                             tellMem, operators,
+                                             operators,
                                              logError, logDebug
                                              ) where
 
@@ -66,17 +66,17 @@ boundedStep (ym, _) s (PC (y, x) D) =
 logDebug :: String -> Fungine ()
 logDebug str = do
     deb <- asks debugLogging
-    when deb . tell $ def { _events = [ErrorEvent str] }
+    when deb . tellDelta $ def { _events = [ErrorEvent str] }
 
 logError :: String -> Fungine ()
-logError str = tell $ def { _events = [ErrorEvent str] }
+logError str = tellDelta $ def { _events = [ErrorEvent str] }
 
 dieError :: String -> a -> Fungine a
 dieError str a = do
     hal <- asks haltOnError
     logError str
     if hal
-        then lift (die str) >> return a
+        then die str >> return a
         else return a
 
 move :: Fungine ()
@@ -95,12 +95,7 @@ move = do
         (False, Right p'') -> return p''
         (False, Left p'') -> dieError "Exceeded memory bounds" p''
     pc.pos .= p''
-    tell $ def { _oldpc = Just c, _newpc = Just (PC p'' d) }
-
-tellMem :: Fungine ()
-tellMem = do
-    arr <- use mem
-    tell $ Delta Nothing Nothing (Just arr) []
+    tellDelta $ def { _oldpc = Just c, _newpc = Just (PC p'' d) }
 
 quoteOp :: Word8 -> Fungine ()
 quoteOp 0x22 = quote .= False
@@ -109,7 +104,7 @@ quoteOp x = pushOp x
 fnStackOp :: Word8 -> Fungine ()
 fnStackOp 0x5b = do
     Just ops <- use fnStack
-    OpSet arr <- lift . lift $ get
+    OpSet arr <- lift $ get
     case ops of
         (o:os) -> do
             let fun = foldr proc (Just $ return ()) os
@@ -119,7 +114,7 @@ fnStackOp 0x5b = do
                     return $ oper >> n'
             case fun of
                 Nothing -> dieError "Invalid opcode in function." ()
-                Just _ -> lift . lift . put . OpSet $ (arr // [(o, fun)])
+                Just _ -> lift . put . OpSet $ (arr // [(o, fun)])
         [] -> dieError "Empty function definition." ()
     fnStack .= Nothing
 fnStackOp x = fnStack %= (fmap (x:))
@@ -192,7 +187,7 @@ stdOps = M.fromList $ [
     , mkStdOp "F" 'F' "Push 15 onto the stack" $
         pushOp 15
     , mkStdOp "Fork" 'K' "Fork a thread. Push 1 for child, 0 for parent" $ do
-        new <- lift $ fork
+        new <- fork
         if new
             then do
                 ticks .= 0
@@ -236,7 +231,7 @@ stdOps = M.fromList $ [
                 if (bt^.subbeat) == 0
                     then return ()
                     else yield >> quant
-        lift quant
+        quant
     , mkStdOp "QuantizeN" 'Q'
         "Pop x. Wait for a beat that is divisible by x." $ do
         x <- fromIntegral <$> popOp
@@ -247,10 +242,10 @@ stdOps = M.fromList $ [
                     else yield >> quant
         if x == 0
             then dieError "Can't quantize on 0 beats." ()
-            else lift quant
+            else quant
     , mkStdOp "Sleep" 's' "Pop x. Sleep for x subbeats." $ do
         x <- popOp
-        forM_ [1..x] $ const (lift yield)
+        forM_ [1..x] $ const yield
     , mkStdOp "Swap" '\\' "Swap the top two items on the stack" $ do
         a <- popOp
         b <- popOp
@@ -282,7 +277,7 @@ stdOps = M.fromList $ [
         a <- popOp
         when (a == 0) $ jump .= True
     , mkStdOp "Random(Dir)" '?' "Change to a random direction." $ do
-        r <- lift . rand $ randomR (0, 3)
+        r <- rand $ randomR (0, 3)
         let d = case (r :: Int) of
                 0 -> L
                 1 -> R
@@ -291,13 +286,13 @@ stdOps = M.fromList $ [
                 _ -> error "Random failure in ?"
         pc.dir .= d
     , mkStdOp "Random(Byte)" 'r' "Push a random byte onto the stack." $ do
-        r <- lift . rand $ random
+        r <- rand $ random
         pushOp r
     , mkStdOp "Random(Range)" 'R'
         "Pop x and y. Push a random byte between x and y (inclusive)." $ do
         a <- popOp
         b <- popOp
-        r <- lift . rand $ randomR (b, a)
+        r <- rand $ randomR (b, a)
         pushOp r
     , mkStdOp "Not" '!' "Pop x. If x is 0, push 1, else push 0." $ do
         a <- popOp
@@ -345,21 +340,21 @@ stdOps = M.fromList $ [
     , mkStdOp "Output" '.' "Pop x. Write x to output buffer." $ do
         a <- popOp
         outbuf <- use progOut
-        lift $ writeBuf outbuf a
+        writeBuf outbuf a
     , mkStdOp "Broadcast" ';' "Pop x. Broadcast x to output buffer." $ do
         a <- popOp
         outbuf <- use progOut
-        lift $ bcastBuf outbuf a
+        bcastBuf outbuf a
     , mkStdOp "Read" '~' "Read a value from input buffer and push it." $ do
         inbuf <- use progIn
-        ch <- lift $ readBuf inbuf
+        ch <- readBuf inbuf
         pushOp ch
     , mkStdOp "Print(Char)" ',' "Pop x. Print x as a character." $ do 
         a <- (chr . fromIntegral) `fmap` popOp
-        tell $ def { _events = [StringEvent [a]] }
+        tellDelta $ def { _events = [StringEvent [a]] }
     , mkStdOp "Print(Byte)" '&' "Pop x. Print x as a number." $ do
         a <- popOp
-        tell $ def { _events = [StringEvent $ show a] }
+        tellDelta $ def { _events = [StringEvent $ show a] }
     , mkStdOp "Major" 'M' "Pop x. Play major chord of pitch x." $ do
         nb <- use noteBuf
         n <- case nb of
@@ -368,7 +363,7 @@ stdOps = M.fromList $ [
         let nes = do
                 ch <- [0, 4, 7]
                 return $ NoteEvent (pitch %~ (ch +) $ n)
-        tell $ def { _events = nes }
+        tellDelta $ def { _events = nes }
     , mkStdOp "Minor" 'm' "Pop x. Play minor chord of pitch x." $ do
         nb <- use noteBuf
         n <- case nb of
@@ -377,7 +372,7 @@ stdOps = M.fromList $ [
         let nes = do
                 ch <- [0, 3, 7]
                 return $ NoteEvent (pitch %~ (ch +) $ n)
-        tell $ def { _events = nes }
+        tellDelta $ def { _events = nes }
     , mkStdOp "Major7" 'L' "Pop x. Play major 7th chord of pitch x." $ do
         nb <- use noteBuf
         n <- case nb of
@@ -386,7 +381,7 @@ stdOps = M.fromList $ [
         let nes = do
                 ch <- [0, 4, 7, 11]
                 return $ NoteEvent (pitch %~ (ch +) $ n)
-        tell $ def { _events = nes }
+        tellDelta $ def { _events = nes }
     , mkStdOp "Minor7" 'l' "Pop x. Play minor 7th chord of pitch x." $ do
         nb <- use noteBuf
         n <- case nb of
@@ -395,7 +390,7 @@ stdOps = M.fromList $ [
         let nes = do
                 ch <- [0, 3, 7, 11]
                 return $ NoteEvent (pitch %~ (ch +) $ n)
-        tell $ def { _events = nes }
+        tellDelta $ def { _events = nes }
     , mkStdOp "Write(Note)" 'z' "Pop dur vel pch cha. Write note buffer." $ do
         dur <- popOp
         vel <- popOp
@@ -407,7 +402,7 @@ stdOps = M.fromList $ [
         ne <- case nb of
             Nothing -> dieError "Can't play empty note" (NoteEvent def)
             (Just n) -> return $ NoteEvent n
-        tell $ def { _events = [ne] }
+        tellDelta $ def { _events = [ne] }
     , mkStdOp "Write(Cha)" 'y'
         "Pop x. Write x as the note buffer channel." $ do
         writeNoteBuf channel
@@ -433,7 +428,7 @@ stdOps = M.fromList $ [
         "Push the duration from the note buffer." $ do
         readNoteBuf duration
     , mkStdOp "End" '@' "Terminate the thread." $ do
-        lift $ end
+        end
     ]
   where mkStdOp n c d f = (fromIntegral $ ord c, Operator n c d f)
         readNoteBuf l = do
@@ -453,7 +448,7 @@ operators = OpSet $ Arr.array (0,255) $ do
 
 runOp :: Word8 -> Fungine ()
 runOp c = do
-    OpSet ops <- lift $ lift $ get
+    OpSet ops <- lift $ get
     case ops ! c of
         Nothing -> dieError ("Unknown operator " ++ show c) ()
         Just op' -> op'
