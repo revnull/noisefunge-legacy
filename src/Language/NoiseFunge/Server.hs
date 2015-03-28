@@ -24,6 +24,7 @@ module Language.NoiseFunge.Server (runServer, ServerConfig(..)) where
 import Network.Socket hiding (sendTo, recvFrom)
 import Network.Socket.ByteString
 
+import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.STM
 
@@ -90,9 +91,9 @@ bufferBinary ms xs = bufs $ ST.execState (buffer >> flush) initial where
                 currBuff .= blank
     bufs bb = (bb^.buffered) []
 
-requestHandler :: Socket -> NoiseFungeEngine ->
+requestHandler :: Socket -> NoiseFungeEngine -> TVar Bool ->
     TVar Subscriptions -> TVar Subscriptions -> IO ()
-requestHandler s nfe stats delts = forever $ do
+requestHandler s nfe rstv stats delts = forever $ do
     (bs, addr) <- recvFrom s 32768
     case decodeOrFail (fromChunks [bs]) of
         (Left (_,_,str)) -> hPutStrLn stderr ("Bad request: " ++ str)
@@ -113,6 +114,8 @@ requestHandler s nfe stats delts = forever $ do
         (Right (_,_, StopProgram pf nf r)) -> do
             stopProgram nfe pf nf r
             hPutStrLn stderr ("Stopping Program(s): " ++ show (pf, nf, r))
+        (Right (_,_, SendReset)) -> do
+            atomically $ writeTVar rstv True
 
 runServer :: ServerConfig -> IO ()
 runServer conf = do
@@ -120,17 +123,29 @@ runServer conf = do
     let nextB = (serverTempo conf ##)
         bufferB = bufferBinary (serverPacketSize conf)
     nfe <- initNF (serverTempo conf) (serverPorts conf) (serverVMOptions conf)
+    rstv <- newTVarIO True
     servs <- forM (serverHosts conf) $ \(fam, addr) -> do
         s <- socket fam Datagram defaultProtocol
         bindSocket s addr
         stats <- newTVarIO M.empty
         delts <- newTVarIO M.empty
-        void . forkIO $ requestHandler s nfe stats delts
+        void . forkIO $ requestHandler s nfe rstv stats delts
         return (s, stats, delts)
     hPutStrLn stderr ("Server is running.")
     beatEvents nfe $ \bt delts deads _ stats -> do
+        rst <- atomically $ do
+            v <- readTVar rstv
+            when v $ writeTVar rstv False
+            return v
         let nb = toStrict $ encode $ NextBeat (nextB bt)
         forM_ servs $ \(s, ssubs, dsubs) -> do
+            when rst $ do
+                let rstm = toStrict $ encode Reset
+                addrs <- atomically $ do
+                    daddrs <- M.elems <$> readTVar dsubs
+                    saddrs <- M.elems <$> readTVar ssubs
+                    return $ mconcat daddrs <> mconcat saddrs
+                mapM_ (sendTo s rstm) (S.toList addrs)
             void $ forkIO $ do
                 (outd, waiting) <- atomically $ do
                     subs <- readTVar dsubs

@@ -270,6 +270,7 @@ mainCurses conn =
                             lift $ putTextBuf tbe m'
                             lift $ putTextBuf tbe "|"
                     return ()
+                Reset -> redraw
                 _ -> return ()
             lift $ render
 

@@ -24,6 +24,7 @@ module Language.NoiseFunge.Server.Comm (Subscription(..),
                                         Conn,
                                         addProgram,
                                         sendBinary',
+                                        requestReset,
                                         streamEvents) where
 
 import Control.Applicative
@@ -61,6 +62,7 @@ data Request =
     Subscribe Subscription (Maybe Beat)
   | StartProgram String String String ProgArray
   | StopProgram (Maybe Word32) (Maybe String) (Maybe String)
+  | SendReset
   deriving (Show, Eq, Ord)
 
 instance Binary Request where
@@ -68,6 +70,7 @@ instance Binary Request where
         getReq 0 = Subscribe <$> get <*> get
         getReq 1 = StartProgram <$> get <*> get <*> get <*> get
         getReq 2 = StopProgram <$> get <*> get <*> get
+        getReq 3 = return SendReset
         getReq _ = error "Bad request"
     put (Subscribe s b) =
         putWord8 0 >> put s >> put b
@@ -75,6 +78,8 @@ instance Binary Request where
         putWord8 1 >> put n >> put ib >> put ob >> put a
     put (StopProgram p n r) =
         putWord8 2 >> put p >> put n >> put r
+    put SendReset =
+        putWord8 3
 
 data Response =
     Catchup Beat PID ProgArray Delta
@@ -84,6 +89,7 @@ data Response =
   | NextBeat Beat
   | ProcessStats Beat BefungeStats
   | TickStats Beat Word32 Word32 Word32 Word32
+  | Reset
   deriving (Show, Eq, Ord)
 
 instance Binary Response where
@@ -95,6 +101,7 @@ instance Binary Response where
         getResp 4 = NextBeat <$> get
         getResp 5 = ProcessStats <$> get <*> get
         getResp 6 = TickStats <$> get <*> get <*> get <*> get <*> get
+        getResp 7 = return Reset
         getResp _ = error "Bad Response"
     put (Catchup a b c d) = putWord8 0 >> put a >> put b >> put c >> put d
     put (Change a b c) = putWord8 1 >> put a >> put b >> put c
@@ -104,6 +111,7 @@ instance Binary Response where
     put (ProcessStats a b) = putWord8 5 >> put a >> put b
     put (TickStats a b c d e) =
         putWord8 6 >> put a >> put b >> put c >> put d >> put e
+    put Reset = putWord8 7
 
 data Conn = Conn Socket SockAddr
 
@@ -169,6 +177,10 @@ addProgram conn name inbuf outbuf arr = do
         sendBinary (StartProgram name inbuf outbuf (makeProgArray arr)) conn
         Just (NewProcess p) <- waitForBinary conn Nothing
         return p
+
+requestReset :: Conn -> IO ()
+requestReset conn = runBuffered $ do
+    sendBinary SendReset conn
 
 streamEvents :: (Functor m, MonadIO m) => [Subscription] -> Conn ->
     (Response -> m a) -> m ()

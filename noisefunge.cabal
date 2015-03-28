@@ -117,6 +117,14 @@ executable nfkill
 
   Ghc-options:       -Wall -O2 -threaded 
 
+executable nfreset
+  hs-source-dirs: nfreset
+  main-is: nfreset.hs
+
+  build-depends: base >= 4 && < 5,
+                 noisefunge
+  Ghc-options:       -Wall -O2 -threaded 
+
 executable nfops
   hs-source-dirs: nfops
   main-is: nfops.hs

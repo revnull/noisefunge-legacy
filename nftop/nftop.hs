@@ -89,6 +89,9 @@ mainCurses conn =
             drawString "   PID Process        Ticks Status Stack Q"
         let vs = ViewerState mempty
             blankLine = take (fromIntegral $ c - 1) $ repeat ' '
+        updateWindow w $ forM_ [2..r-1] $ \i -> do
+            moveCursor i 0
+            drawString blankLine
         void $ flip S.runStateT vs $ streamEvents [Stats] conn $ \ev -> do
             cevs <- lift $ getAllEvents w
             forM_ cevs $ \cev -> do
@@ -122,6 +125,7 @@ mainCurses conn =
                 ProcessStats _ st -> do
                     let pid = st^.vmPID
                     procs.(at pid) .= Just st
+                Reset -> throw Redraw
                 _ -> return ()
             lift $ render
 
