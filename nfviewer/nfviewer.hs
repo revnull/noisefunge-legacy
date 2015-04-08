@@ -78,29 +78,29 @@ putTextBuf (TB c r w s) st = do
 
 highlight :: ProgArray -> Pos -> ColorID -> Update ()
 highlight arr (r,c) col = do
-    moveCursor (fromIntegral r) (fromIntegral c)
+    moveCursor (fromIntegral r + 1) (fromIntegral c)
     setColor col
     drawString . safeChars $ [chr . fromIntegral $ (arr ! (r, c))]
 
 drawBoard :: ProgArray -> Update ()
 drawBoard arr = do
     let (_, (rm, cm)) = bounds arr
-    moveCursor 0 0
+    moveCursor 1 0
     setColor defaultColorID
     forM_ [0..rm] $ \row -> do
-        moveCursor (fromIntegral row) 0
+        moveCursor (fromIntegral row + 1) 0
         let str = [chr . fromIntegral $ (arr ! (row, col)) | col <- [0..cm]]
         drawString . safeChars $ str
 
-newProgView :: ColorID -> ColorID -> TextBuf -> ProgArray ->
+newProgView :: ColorID -> ColorID -> ColorID -> TextBuf -> PID -> ProgArray ->
     S.StateT ViewerState Curses (Maybe (Tile, Window, Delta -> Curses ()))
-newProgView exec out tbe parr = res where
+newProgView hdr exec out tbe (pnum, pnam) parr = res where
     (_, (rm, cm)) = bounds parr
     rm' = fromIntegral rm
     cm' = fromIntegral cm
     res = do
         tilr <- use tiler
-        tile' <- gen %%= tile 5 'x' (rm' + 2) (cm' + 2) tilr
+        tile' <- gen %%= tile 5 'x' (rm' + 3) (cm' + 2) tilr
         case tile' of
             Nothing -> return Nothing
             Just (til@(Tile _ tl _), tilr') -> do
@@ -108,14 +108,19 @@ newProgView exec out tbe parr = res where
                 (w, fn) <- lift (viewer tl)
                 return $ Just (til, w, fn)
     viewer (r, c) = do
-        w <- newWindow (rm' + 2) (cm' + 2) r c
-        tb <- liftIO $ newTextBuf out (rm' + 1) (fromIntegral cm' + 1) w
+        w <- newWindow (rm' + 3) (cm' + 2) r c
+        updateWindow w $ do
+            moveCursor 0 0
+            setColor hdr
+            let hname = take (fromIntegral cm' + 1) (name ++ repeat ' ')
+                name = show pnum ++ (':':pnam)
+            drawString hname
+        tb <- liftIO $ newTextBuf out (rm' + 2) (fromIntegral cm' + 1) w
         putTextBuf tb " "
         aref <- liftIO $ newIORef parr
         updateWindow w $ drawBoard parr
         return . (w,) $ \delt -> do
             arr <- liftIO $ readIORef aref
-
             arr' <- do
                 forM_ (delt^.events) $ \ev -> case ev of
                     StringEvent str -> putTextBuf tb str
@@ -196,10 +201,11 @@ mainCurses conn =
         exec <- newColorID ColorBlack ColorWhite 1
         out <- newColorID ColorWhite ColorBlue 2
         err <- newColorID ColorWhite ColorRed 3
+        hdr <- newColorID ColorBlack ColorCyan 4
         tbe <- liftIO $ newTextBuf err (r - 2) (fromIntegral c) w
         putTextBuf tbe " "
 
-        let newView = newProgView exec out tbe
+        let newView = newProgView hdr exec out tbe
 
         render
 
@@ -225,7 +231,7 @@ mainCurses conn =
                     prc <- use (procs.(at pid))
                     case prc of
                         Nothing -> do
-                            pv <- newView arr
+                            pv <- newView pid arr
                             case pv of
                                 Nothing -> do
                                     procs.(at pid) .= Just Nothing
@@ -239,7 +245,7 @@ mainCurses conn =
                     prc <- use (procs.(at pid))
                     case (prc, delt^.change) of
                         (Nothing, Just ch) -> do
-                            pv <- newView ch
+                            pv <- newView pid ch
                             case pv of
                                 Nothing -> procs.(at pid) .= Just Nothing
                                 pv'@(Just (_, _, fn)) -> do
