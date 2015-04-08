@@ -50,7 +50,6 @@ executable funged
                  array,
                  containers,
                  transformers,
-                 ncurses,
                  network,
                  ConfigFile
 
