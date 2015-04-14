@@ -51,9 +51,11 @@ parseConf conf = sc where
         (M.fromList <$> parsePorts) <*>
         parseTempo <*>
         parseOpParams <*>
+        parsePreloads <*>
         get conf "DEFAULT" "packet_size"
  
     servers = [srv | srv <- sections conf, "server" == take 6 srv]
+    preloads = [pre | pre <- sections conf, "preload" == take 7 pre]
     parseHosts = forM servers $ \sect -> do
         h <- get conf sect "host"
         p <- get conf sect "port"
@@ -61,6 +63,11 @@ parseConf conf = sc where
         ais <- liftIO $ getAddrInfo hints (Just h) (Just p)
         forM ais $ \ai -> do
             return (addrFamily ai, addrAddress ai)
+    parsePreloads = forM preloads $ \sect -> do
+        f <- get conf sect "file"
+        ib <- get conf sect "inbuf"
+        ob <- get conf sect "outbuf"
+        return (f, ib, ob)
     ports = [prt | prt <- sections conf, "port" == take 4 prt]
     parsePorts = forM ports $ \sect -> do
         conn <- Just <$> get conf sect "connection" <|> return Nothing

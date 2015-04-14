@@ -38,7 +38,7 @@ import Data.Binary
 import Data.Int
 import qualified Data.Map as M
 import qualified Data.Set as S
-import Data.ByteString.Lazy as BSL
+import Data.ByteString.Lazy as BSL hiding (readFile)
 import qualified Data.ByteString as BS
 
 import System.IO
@@ -56,6 +56,7 @@ data ServerConfig = ServerConfig {
         serverPorts :: M.Map String ALSAPort,
         serverTempo :: Tempo,
         serverVMOptions :: OperatorParams,
+        serverPreload :: [(FilePath, String, String)],
         serverPacketSize :: Word16
     } deriving (Show, Eq, Ord)
 
@@ -131,6 +132,9 @@ runServer conf = do
         delts <- newTVarIO M.empty
         void . forkIO $ requestHandler s nfe rstv stats delts
         return (s, stats, delts)
+    forM_ (serverPreload conf) $ \(f, ib, ob) -> do
+        pa <- (makeProgArray . lines) <$> (liftIO $ readFile f)
+        startProgram nfe pa f ib ob
     hPutStrLn stderr ("Server is running.")
     beatEvents nfe $ \bt delts deads _ stats -> do
         rst <- atomically $ do
