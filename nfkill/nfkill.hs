@@ -31,7 +31,6 @@ desc :: InfoMod a
 desc = fullDesc
     <> header "nfkill - noisefunge process killer"
 
-
 main :: IO ()
 main = do
     req <- execParser (info (helper <*> killSpec) desc)

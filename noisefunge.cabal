@@ -68,6 +68,7 @@ executable nfviewer
                  ncurses,
                  lens,
                  random,
+                 optparse-applicative,
                  containers
 
   Ghc-options:       -Wall -O2 -threaded 

@@ -34,6 +34,9 @@ import Data.IORef
 import qualified Data.Map as M
 import Data.Monoid
 import Data.Typeable
+import Data.Word
+
+import Options.Applicative hiding (str)
 
 import System.Random
 
@@ -41,6 +44,28 @@ import UI.NCurses as Curses
 
 import Tiler
 import Language.NoiseFunge.API
+
+newtype Splitter = Splitter { unSplitter :: (Word32, Word32) }
+
+instance Read Splitter where
+    readsPrec p = readParen (p > 7)
+        (\r -> [(Splitter (x,y),u) | (x,s)   <- readsPrec 8 r,
+                ("/",t) <- lex s,
+                (y,u)   <- readsPrec 8 t ])
+
+data ViewerOpts = ViewerOpts {
+    _distributor :: Maybe Splitter
+  } 
+
+$(makeLenses ''ViewerOpts)
+
+optsSpec :: Parser ViewerOpts
+optsSpec = ViewerOpts
+    <$> optional (option auto (long "distribution" <> short 'd'))
+
+desc :: InfoMod a
+desc = fullDesc
+    <> header "nfviewer - noisefunge viewer"
 
 data ViewerState = ViewerState {
     _procs :: M.Map PID (Maybe (Tile, Window, Delta -> Curses ())),
@@ -92,18 +117,25 @@ drawBoard arr = do
         let str = [chr . fromIntegral $ (arr ! (row, col)) | col <- [0..cm]]
         drawString . safeChars $ str
 
-newProgView :: ColorID -> ColorID -> ColorID -> TextBuf -> PID -> ProgArray ->
+newProgView :: ViewerOpts -> ColorID -> ColorID -> ColorID -> TextBuf ->
+    PID -> ProgArray ->
     S.StateT ViewerState Curses (Maybe (Tile, Window, Delta -> Curses ()))
-newProgView hdr exec out tbe (pnum, pnam) parr = res where
+newProgView opts hdr exec out tbe (pnum, pnam) parr = res where
     (_, (rm, cm)) = bounds parr
     rm' = fromIntegral rm
     cm' = fromIntegral cm
+    filtn = fst . unSplitter <$> opts^.distributor
+    filtd = snd . unSplitter <$> opts^.distributor
+    filtf d n x = n == (x `mod` d)
+    filt x = filtf <$> filtd <*> filtn <*> pure x
     res = do
         tilr <- use tiler
         tile' <- gen %%= tile 5 'x' (rm' + 3) (cm' + 2) tilr
-        case tile' of
-            Nothing -> return Nothing
-            Just (til@(Tile _ tl _), tilr') -> do
+        let valid = maybe True id (filt pnum)
+        case (valid, tile') of
+            (False, _) -> return Nothing
+            (_, Nothing) -> return Nothing
+            (_, Just (til@(Tile _ tl _), tilr')) -> do
                 tiler .= tilr'
                 (w, fn) <- lift (viewer tl)
                 return $ Just (til, w, fn)
@@ -184,7 +216,8 @@ redraw = do
     liftIO $ throwIO Redraw
 
 mainCurses :: Conn -> IO ()
-mainCurses conn = 
+mainCurses conn = do
+    opts <- execParser (info (helper <*> optsSpec) desc)
     runCurses $ do
         setEcho False
         _ <- setCursorMode CursorInvisible
@@ -205,7 +238,7 @@ mainCurses conn =
         tbe <- liftIO $ newTextBuf err (r - 2) (fromIntegral c) w
         putTextBuf tbe " "
 
-        let newView = newProgView hdr exec out tbe
+        let newView = newProgView opts hdr exec out tbe
 
         render
 
