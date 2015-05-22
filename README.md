@@ -9,6 +9,8 @@ the befunge family of languages. Some features of the language are:
 - A lightweight VM capable of supporting thousands of threads.
 - Network-based runtime control.
 
+Here's an example noisefunge video: https://www.youtube.com/watch?v=9zObiWi4Mbw
+
 ## Installation
 
 Currently, the recommended method for installing NoiseFunge is to use cabal
