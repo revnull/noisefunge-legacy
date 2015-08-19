@@ -52,14 +52,14 @@ import Language.NoiseFunge.Engine
 import Language.NoiseFunge.Server.Comm
 
 data ServerConfig = ServerConfig {
-        serverHosts :: [(Family, SockAddr)],
-        serverPorts :: M.Map String ALSAPort,
-        serverTempo :: Tempo,
-        serverVMOptions :: OperatorParams,
-        serverPreload :: [(FilePath, String, String)],
-        serverPacketSize :: Word16
+        _serverHosts :: [(Family, SockAddr)],
+        _serverALSAConfig :: ALSAThreadConfig,
+        _serverVMOptions :: OperatorParams,
+        _serverPreload :: [(FilePath, String, String)],
+        _serverPacketSize :: Word16
     } deriving (Show, Eq, Ord)
 
+$(makeLenses ''ServerConfig)
 
 type Subscriptions = M.Map Beat (S.Set SockAddr)
 
@@ -121,18 +121,19 @@ requestHandler s nfe rstv stats delts = forever $ do
 runServer :: ServerConfig -> IO ()
 runServer conf = do
     hSetBuffering stderr LineBuffering
-    let nextB = (serverTempo conf ##)
-        bufferB = bufferBinary (serverPacketSize conf)
-    nfe <- initNF (serverTempo conf) (serverPorts conf) (serverVMOptions conf)
+    let nextB = ((aconf^.alsaTempo) ##)
+        bufferB = bufferBinary (conf^.serverPacketSize)
+        aconf = conf^.serverALSAConfig
+    nfe <- initNF aconf (conf^.serverVMOptions)
     rstv <- newTVarIO True
-    servs <- forM (serverHosts conf) $ \(fam, addr) -> do
+    servs <- forM (conf^.serverHosts) $ \(fam, addr) -> do
         s <- socket fam Datagram defaultProtocol
         bindSocket s addr
         stats <- newTVarIO M.empty
         delts <- newTVarIO M.empty
         void . forkIO $ requestHandler s nfe rstv stats delts
         return (s, stats, delts)
-    forM_ (serverPreload conf) $ \(f, ib, ob) -> do
+    forM_ (conf^.serverPreload) $ \(f, ib, ob) -> do
         pa <- (makeProgArray . lines) <$> (liftIO $ readFile f)
         startProgram nfe pa f ib ob
     hPutStrLn stderr ("Server is running.")

@@ -48,8 +48,7 @@ parseConf :: (MonadError CPError m, Functor m, Applicative m, MonadIO m,
 parseConf conf = sc where
     sc = ServerConfig <$>
         (concat <$> parseHosts) <*>
-        (M.fromList <$> parsePorts) <*>
-        parseTempo <*>
+        parseALSAConfig <*>
         parseOpParams <*>
         parsePreloads <*>
         get conf "DEFAULT" "packet_size"
@@ -68,6 +67,10 @@ parseConf conf = sc where
         ib <- get conf sect "inbuf"
         ob <- get conf sect "outbuf"
         return (f, ib, ob)
+    parseALSAConfig = ALSAThreadConfig <$>
+        parseTempo <*>
+        (M.fromList <$> parsePorts) <*>
+        get conf "DEFAULT" "note_limiter"
     ports = [prt | prt <- sections conf, "port" == take 4 prt]
     parsePorts = forM ports $ \sect -> do
         conn <- Just <$> get conf sect "connection" <|> return Nothing
@@ -89,6 +92,7 @@ Right defaultConf = defConf where
         setDef "DEFAULT" "ignoreerror" "False" >>=
         setDef "DEFAULT" "wrap" "False" >>=
         setDef "DEFAULT" "debug" "False" >>=
+        setDef "DEFAULT" "note_limiter" "True" >>=
         addSec "port0" >>=
         setDef "port0" "starting_channel" "0"
     setDef s k v cp = set cp s k v

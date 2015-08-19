@@ -25,6 +25,7 @@ module Language.NoiseFunge (Tempo(..), bpm, subbeats,
                             opName, opChar, opDesc,
                             stdOps,
                             ALSAPort(ALSAPort), portConnection,
+                            ALSAThreadConfig(ALSAThreadConfig),
                             portStarting,
                             runServer) where
 
