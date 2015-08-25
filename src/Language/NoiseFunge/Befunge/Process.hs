@@ -83,8 +83,8 @@ instance B.Binary Dir where
     put = B.putWord8 . fromIntegral . fromEnum 
 
 data PC = PC {
-    _pos :: Pos,
-    _dir :: Dir
+    _pos :: !Pos,
+    _dir :: !Dir
     } deriving (Read, Show, Eq, Ord)
 
 instance Default PC where
@@ -97,7 +97,7 @@ instance B.Binary PC where
 data Event =
     StringEvent String
   | ErrorEvent String
-  | NoteEvent Note
+  | NoteEvent !Note
   deriving (Read, Show, Eq, Ord)
 
 instance B.Binary Event where
@@ -132,36 +132,36 @@ instance Default Delta where
 
 type Deltas s = [(PID, s, Delta)] -> [(PID, s, Delta)]
 
-newtype Stack a = Stack (Word32, [a])
+data Stack a = Stack !Word32 [a]
     deriving (Read, Show, Eq, Ord)
 
 instance Monoid (Stack a) where
-    mempty = Stack (0, [])
-    mappend (Stack (xl, xs)) (Stack (yl, ys)) = Stack (xl + yl, xs ++ ys)
+    mempty = Stack 0 []
+    mappend (Stack xl xs) (Stack yl ys) = Stack (xl + yl) (xs ++ ys)
 
 (#+) :: a -> Stack a -> Stack a
-a #+ Stack (l, xs) = Stack (l+1, a:xs)
+a #+ Stack l xs = Stack (l+1) (a:xs)
 
 pop :: Stack a -> Maybe (a, Stack a)
-pop (Stack (0, [])) = Nothing
-pop (Stack (0, _)) = error "Invalid stack length"
-pop (Stack (_, [])) = error "Invalid stack contents"
-pop (Stack (l, (x:xs))) = Just (x, Stack (l-1, xs))
+pop (Stack 0 []) = Nothing
+pop (Stack 0 _) = error "Invalid stack length"
+pop (Stack _ []) = error "Invalid stack contents"
+pop (Stack l (x:xs)) = Just (x, Stack (l-1) xs)
 
 stackLength :: Stack a -> Word32
-stackLength (Stack (l, _)) = l
+stackLength (Stack l _) = l
 
 data ProcessState = PS {
-    _mem     :: ProgArray,
-    _ticks   :: Word32,
-    _pc      :: PC,
-    _stack   :: Stack Word8,
-    _quote   :: Bool,
-    _jump    :: Bool,
-    _fnStack :: Maybe [Word8],
-    _progIn  :: String,
-    _progOut :: String,
-    _noteBuf :: Maybe Note
+    _mem     :: !ProgArray,
+    _ticks   :: !Word32,
+    _pc      :: !PC,
+    _stack   :: !(Stack Word8),
+    _quote   :: !Bool,
+    _jump    :: !Bool,
+    _fnStack :: !(Maybe [Word8]),
+    _progIn  :: !String,
+    _progOut :: !String,
+    _noteBuf :: !(Maybe Note)
     }
 
 makeProcessState :: ProgArray -> String -> String -> ProcessState
@@ -169,9 +169,9 @@ makeProcessState arr inp outp =
     PS arr 0 def mempty False False mempty inp outp Nothing
 
 data OperatorParams = OperatorParams {
-    haltOnError :: Bool,
-    wrapOnEdge :: Bool,
-    debugLogging :: Bool
+    haltOnError :: !Bool,
+    wrapOnEdge :: !Bool,
+    debugLogging :: !Bool
   } deriving (Read, Show, Eq, Ord)
 
 instance Default OperatorParams where
@@ -213,9 +213,9 @@ tellMem = do
     tellDelta $ Delta Nothing Nothing (Just arr) []
 
 data ProcessStats = PStats {
-    _psTicks     :: Word32,
-    _psStackSize :: Word32,
-    _psQuote     :: Bool
+    _psTicks     :: !Word32,
+    _psStackSize :: !Word32,
+    _psQuote     :: !Bool
   } deriving (Show, Eq, Ord)
 
 $(makeLenses ''ProcessStats)

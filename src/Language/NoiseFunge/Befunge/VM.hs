@@ -135,7 +135,7 @@ instance Monad m => MonadState s (ProcessStateT w s m) where
 type PID = (Word32, String)
 
 data Process w s m = Process {
-    _procID    :: PID,
+    _procID    :: !PID,
     _procExec  :: Exec w s m,
     _procState :: s
   }
@@ -154,7 +154,7 @@ instance Monoid (Buffer w s m) where
 instance Default (Buffer w s m) where
     def = mempty
 
-data IDManager = IDMan Word32 [Word32]
+data IDManager = IDMan !Word32 [Word32]
     deriving (Show, Eq, Ord)
 
 newID :: IDManager -> (Word32, IDManager)

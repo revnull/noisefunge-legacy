@@ -30,10 +30,10 @@ import Data.Word
 import Data.Binary
 
 data Note = Note {
-    _channel :: Word8,
-    _pitch :: Word8,
-    _velocity :: Word8,
-    _duration :: Word8
+    _channel :: !Word8,
+    _pitch :: !Word8,
+    _velocity :: !Word8,
+    _duration :: !Word8
   } deriving (Read, Show, Eq, Ord)
 
 instance Default Note where

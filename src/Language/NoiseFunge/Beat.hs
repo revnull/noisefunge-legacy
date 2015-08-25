@@ -31,15 +31,15 @@ import Data.Binary
 import Data.Default
 
 data Tempo = Tempo {
-    _bpm :: Word32,
-    _subbeats :: Word32
+    _bpm :: !Word32,
+    _subbeats :: !Word32
   } deriving (Read, Show, Eq, Ord)
 
 $(makeLenses ''Tempo)
 
 data Beat = Beat {
-    _beat :: Word32,
-    _subbeat :: Word32
+    _beat :: !Word32,
+    _subbeat :: !Word32
   } deriving (Read, Eq, Ord)
 
 $(makeLenses ''Beat)

@@ -39,7 +39,7 @@ library
                      binary >= 0.7,
                      ConfigFile
                      
-  Ghc-options:       -Wall -O2 -threaded
+  Ghc-options:       -Wall -O2 -threaded -funbox-strict-fields
 
 executable funged
   hs-source-dirs: funged

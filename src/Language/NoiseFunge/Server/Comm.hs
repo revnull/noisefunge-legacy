@@ -82,13 +82,13 @@ instance Binary Request where
         putWord8 3
 
 data Response =
-    Catchup Beat PID ProgArray Delta
-  | Change Beat PID Delta
-  | Dead Beat PID (Maybe String)
-  | NewProcess PID
-  | NextBeat Beat
-  | ProcessStats Beat BefungeStats
-  | TickStats Beat Word32 Word32 Word32 Word32
+    Catchup !Beat !PID ProgArray Delta
+  | Change !Beat !PID Delta
+  | Dead !Beat !PID (Maybe String)
+  | NewProcess !PID
+  | NextBeat !Beat
+  | ProcessStats !Beat !BefungeStats
+  | TickStats !Beat !Word32 !Word32 !Word32 !Word32
   | Reset
   deriving (Show, Eq, Ord)
 
