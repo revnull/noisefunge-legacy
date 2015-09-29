@@ -330,6 +330,15 @@ stdOps = M.fromList $ [
             then pushOp (b `div` a)
             else do
                 dieError "Divide by zero" 255 >>= pushOp
+    , mkStdOp "DivMod" 'd' "Pop x and y. Push y / x and y % x." $ do
+        a <- popOp
+        b <- popOp
+        if a /= 0
+            then 
+                let (d, m) = b `divMod` a
+                in pushOp d >> pushOp m
+            else do
+                dieError "DivMod by zero" 255 >>= pushOp
     , mkStdOp "Mod" '%' "Pop x and y. Push y % x." $ do
         a <- popOp
         b <- popOp
