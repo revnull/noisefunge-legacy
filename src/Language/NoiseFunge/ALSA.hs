@@ -85,6 +85,8 @@ data ALSAThreadConfig = ALSAThreadConfig {
 
 $(makeLenses ''ALSAThreadConfig)
 
+-- A note limiter prevents a note from playing when there is already a note
+-- playing for that channel and pitch
 type NoteLimiter = IOArray.IOArray Word8 (Maybe Beat)
 
 data NotePlayer = NotePlayer {
@@ -98,6 +100,10 @@ $(makeLenses ''NotePlayer)
 newNoteLimiter :: IO NoteLimiter
 newNoteLimiter = IOArray.newArray (0,255) Nothing
 
+-- checkOverlap returns True if there is overlap given the start, end,
+-- and pitch. Otherwise, it returns False and writes that note to the
+-- note limiter.
+-- checkOverlap :: Start -> End -> Pitch -> NoteLimiter -> IO Bool
 checkOverlap :: Beat -> Beat -> Word8 -> NoteLimiter -> IO Bool
 checkOverlap st en pch nl = do
     pl <- IOArray.readArray nl pch

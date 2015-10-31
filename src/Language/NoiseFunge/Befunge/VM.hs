@@ -77,26 +77,36 @@ instance Monoid (Queue a) where
 instance Functor Queue where
     fmap f (Q x y) = Q (fmap f x) (fmap f y)
 
+-- Exec is the running state of a Process at any guven time
 data Exec w s m =
-    Running (ProcessStateT w s m ())
-  | Halted (Maybe String)
-  | WBlock String Bool w (ProcessStateT w s m ())
-  | RBlock String (w -> ProcessStateT w s m ())
-  | PPID (PID -> ProcessStateT w s m ())
-  | Fork (Bool -> ProcessStateT w s m ())
-  | Rand (StdGen -> (ProcessStateT w s m (), StdGen))
-  | Time (Beat -> ProcessStateT w s m ())
+    Running (ProcessStateT w s m ()) -- yields
+  | Halted (Maybe String) -- terminates
+  | WBlock String Bool w (ProcessStateT w s m ()) -- blocking write
+  | RBlock String (w -> ProcessStateT w s m ()) -- blocking read
+  | PPID (PID -> ProcessStateT w s m ()) -- get PID from VM
+  | Fork (Bool -> ProcessStateT w s m ()) -- fork a new microthread
+  | Rand (StdGen -> (ProcessStateT w s m (), StdGen)) -- random
+  | Time (Beat -> ProcessStateT w s m ()) -- get the current beat
 
+-- A ProcessM is a continuation monad that returns an Exec over the state of
+-- a process.
 type ProcessM w s m = ContT (Exec w s m) (StateT s m)
 
+-- A Trap function takes an Exec and returns a ProcessM. This is ultimately
+-- used with callCC in a ProcessStateT to allow the process to yield, block,
+-- or receive data from the VM.
 type Trap w s m = Exec w s m -> ProcessM w s m ()
 
+-- A ProcessStateT is a ProcessM with a reader over it for its Trap.
 newtype ProcessStateT w s m a = PST {
     runPST :: ReaderT (Trap w s m) (ProcessM w s m) a }
 
+-- succeed lifts a ProcessM into a ProcessStateT
 succeed :: ProcessM w s m a -> ProcessStateT w s m a
 succeed m = PST $ lift m
 
+-- run a ProcessStateT for the given state. Return an Exec and the updated
+-- state.
 runPS :: Monad m => ProcessStateT w s m a -> s -> m (Exec w s m, s)
 runPS (PST pst) s = runStateT (runContT runner return) s where
     runner = callCC $ \trap -> do
@@ -134,12 +144,15 @@ instance Monad m => MonadState s (ProcessStateT w s m) where
 
 type PID = (Word32, String)
 
+-- A Process is a running microthread in noisefunge. It has a PID, an ExecState
+-- and its own state.
 data Process w s m = Process {
     _procID    :: !PID,
     _procExec  :: Exec w s m,
     _procState :: s
   }
 
+-- Buffers are used for IPC via input/output channels.
 data Buffer w s m = Buffer {
     _readQueue   :: Queue (Process w s m),
     _writeQueue  :: Queue (Process w s m),
@@ -154,6 +167,7 @@ instance Monoid (Buffer w s m) where
 instance Default (Buffer w s m) where
     def = mempty
 
+-- IDManager is used to prevent duplication of the PID numbers
 data IDManager = IDMan !Word32 [Word32]
     deriving (Show, Eq, Ord)
 
@@ -167,6 +181,9 @@ freeID x (IDMan w xs) = IDMan w (x:xs)
 instance Default IDManager where
     def = IDMan 0 []
 
+-- VM is kind of a misleading name. This isn't a virtual machine as much as the
+-- main data structure that contains the state of all of the processes and
+-- output buffers at any given point in time.
 data VM w s m = VM {
     _processQueue :: Queue (Process w s m),
     _buffers :: M.Map String (Buffer w s m),
@@ -185,9 +202,12 @@ $(makeLenses ''VM)
 $(makeLenses ''Process)
 $(makeLenses ''Buffer)
 
+-- To kill a process, set the state to Halted with an optional reason.
 kill :: Maybe String -> Process w s m -> Process w s m
 kill reas proc = set procExec (Halted reas) proc
 
+-- trap is an operation in the ProcessStateT monad that takes a function which
+-- converts the current continuation into an Exec. It then uses callCC to 
 trap :: ((a -> ProcessStateT w s m b) -> Exec w s m) -> ProcessStateT w s m a
 trap f = PST $ do
     e <- ask
@@ -248,9 +268,33 @@ addProcess :: String -> Program w s m -> VM w s m -> (Process w s m, VM w s m)
 addProcess name f vm = (p, queueProcess p vm') where
     (p, vm') = makeProcess name f vm
 
+
+-- These lenses are meant to be used in the StateT monad in the advance
+-- function. They are meant to give semantic meaning to commonly used
+-- lenses.
+
+currentVM :: Simple Lens (VM w s m, Queue (Process w s m)) (VM w s m)
+currentVM = _1
+
+currentQueue :: Simple Lens (VM w s m, Queue (Process w s m))
+    (Queue (Process w s m))
+currentQueue = _1.processQueue
+
+doneQueue :: Simple Lens (VM w s m, Queue (Process w s m))
+    (Queue (Process w s m))
+doneQueue = _2
+
+
+-- advance the VM. This takes the current Beat and VM and returns the VM state
+-- after a single tick of the clock. A tick runs all non-blocked tasklets until
+-- they yield or are blocked.
+--
+-- The state in the StateT monad is a tuple of the VM and queue of processes
+-- that have finished their tick.
 advance :: (Monad m, Functor m) => Beat -> VM w s m -> m (VM w s m)
 advance bt vm = flip evalStateT (vm, mempty) $ initialize >> advanced where
-    initialize = zoom _1 $ do
+    initialize = zoom currentVM $ do
+        -- Clean up the killed processes
         killed <- execWriterT $ do
             zoom processQueue filterQueue
             zoom (buffers.traverse) $ do
@@ -267,84 +311,121 @@ advance bt vm = flip evalStateT (vm, mempty) $ initialize >> advanced where
             return False
         _ -> return True
     advanced = do
+        -- run a queued process if one exits. Otherwise run a buffered
+        -- process.
         res <- runMaybeT $ runQueued bt <|> runBuffers
         case res of
-            Nothing -> do
-                _1.buffers %= fmap (set bcastValues [])
+            Nothing -> do -- Nothing (left to) do
+                currentVM.buffers %= fmap (set bcastValues [])
                 updateIDM
-                pq <- use _2
-                _1.processQueue .= pq
-                use _1
-            _ -> advanced
+
+                -- replace the processQueue with the finished processes
+                pq <- use doneQueue
+                currentQueue .= pq
+                use currentVM
+            _ -> advanced -- still work to do
+    -- free the IDs of the dead processes
     updateIDM = do
-        dead <- use (_1.deadProcesses)
+        dead <- use (currentVM.deadProcesses)
         forM_ dead $ \((pid,_),_, _) -> do
-            _1.idman %= freeID pid 
+            currentVM.idman %= freeID pid 
 
 runStep :: Monad m => Process w s m -> m (Exec w s m, s)
 runStep p = case (p^.procExec, p^.procState) of
     (Running f, s) -> runPS f s
     ex -> return ex
 
+-- run a Queued process, if there are any left on the queue.
 runQueued :: Monad m => Beat ->
     MaybeT (StateT (VM w s m, Queue (Process w s m)) m) () 
 runQueued bt = do
-    q <- use (_1.processQueue)
+    q <- use (currentQueue)
     (p, q') <- MaybeT (return $ qPop q)
-    _1.processQueue .= q'
+    currentQueue .= q'
     (ex, s) <- lift . lift $ runStep p
     let p' = set procExec ex $ set procState s $ p
         pid = p^.procID
     case ex of
+        -- process yielded
         Running _ -> do
-            _2 %= qPush p'
+            -- onto the finished (for this tick) queue
+            doneQueue %= qPush p'
+        
+        --process halted
         Halted reas -> do
-            _1.deadProcesses %= ((pid, reas, p'):)
-        WBlock bname False _ _ -> do
-            buf <- use (_1.buffers.(at bname))
+            currentVM.deadProcesses %= ((pid, reas, p'):)
+
+        -- process ends up blocked on a write buffer
+        WBlock bname False _ _ -> do -- 
+            buf <- use (currentVM.buffers.(at bname))
             let buf' = maybe mempty id buf
                 buf'' = buf' & writeQueue %~ qPush p'
-            _1.buffers.(at bname) .= Just buf''
+            currentVM.buffers.(at bname) .= Just buf''
             return $ ()
+
+        -- process broadcasts a value to a write buffer and continues
         WBlock bname True w f -> do
-            buf <- use (_1.buffers.(at bname))
+            buf <- use (currentVM.buffers.(at bname))
             let buf' = maybe mempty id buf
                 buf'' = buf' & bcastValues %~ (w:)
-            _1.buffers.(at bname) .= Just buf''
-            _1.processQueue %= qPush (set procExec (Running f) p')
+            currentVM.buffers.(at bname) .= Just buf''
+            -- back onto the active queue for this tick
+            currentQueue %= qPush (set procExec (Running f) p')
+
+        -- block on the read queue
         RBlock bname _ -> do
-            buf <- use (_1.buffers.(at bname))
+            buf <- use (currentVM.buffers.(at bname))
             let buf' = maybe mempty id buf
                 buf'' = buf' & readQueue %~ qPush p'
-            _1.buffers.(at bname) .= Just buf''
+            currentVM.buffers.(at bname) .= Just buf''
+
+        -- run the random function. Updating the StdGen of the VM.
         Rand f -> do
-            f' <- _1.gen %%= f
-            _1.processQueue %= qPush (set procExec (Running f') p')
+            f' <- currentVM.gen %%= f
+            -- back onto the active queue for this tick
+            currentQueue %= qPush (set procExec (Running f') p')
+
+        -- process requests its PID
         PPID f -> do
-            _1.processQueue %= qPush (set procExec (Running (f pid)) p')
+            -- back onto the active queue for this tick
+            currentQueue %= qPush (set procExec (Running (f pid)) p')
+
+        -- process wants to fork
         Fork f -> do
-            _1.processQueue %= qPush (set procExec (Running (f False)) p')
+            currentQueue %= qPush (set procExec (Running (f False)) p')
             let prog = program (p^.procState) (f True)
-            c <- _1 %%= makeProcess (p^.procID._2) prog
-            _1.processQueue %= qPush c
+            -- make a new process based on the Exec of the current proces.
+            -- (automatically queued)
+            c <- currentVM %%= makeProcess (p^.procID._2) prog
+            -- back onto the active queue for this tick
+            currentQueue %= qPush c
+
+        -- process wants the current beat.
         Time f -> do
-            _1.processQueue %= qPush (set procExec (Running (f bt)) p')
-        
+            -- back onto the active queue for this tick
+            currentQueue %= qPush (set procExec (Running (f bt)) p')
+
+-- Iterate through the buffers and run the next process that can read or
+-- write from a buffer.
 runBuffers :: (Monad m) =>
     MaybeT (StateT (VM w s m, Queue (Process w s m)) m) ()
 runBuffers = do
-    bufs <- use (_1.buffers)
+    bufs <- use (currentVM.buffers)
     let (bufs', ps) = runWriter . forM (M.toList bufs) $ \(bn, buf) -> do
             let (buf', p) = handleBuffer buf
             tell (p++)
             return (bn, buf')
     case (ps []) of
-        [] -> fail ""
+        [] -> fail "" -- no processes freed by the buffers
         ps' -> do
-            _1.buffers .= M.fromList bufs'
-            mapM_ ((_1.processQueue %=) .  qPush) ps'
+            -- update the buffers
+            currentVM.buffers .= M.fromList bufs'
+            -- add the unblocked processes to the current running queue
+            mapM_ ((currentQueue %=) .  qPush) ps'
             return ()
 
+-- Run through a buffer and return a list of any Processes that are no longer
+-- blocked on the buffer.
 handleBuffer :: Buffer w s m -> (Buffer w s m, [Process w s m])
 handleBuffer buf = (buf'', concatMap (uncurry comm) ps) where
     (ps, buf') = pairs (cycleBC buf)
@@ -357,6 +438,7 @@ handleBuffer buf = (buf'', concatMap (uncurry comm) ps) where
     comm rp (Left w) =
         let (RBlock _ rres) = rp^.procExec
         in [set procExec (Running (rres w)) rp]
+    -- multiple broadcasts cycle among eachother.
     cycleBC b@(Buffer _ _ []) = b
     cycleBC (Buffer rq wq l) = Buffer rq wq (cycle l)
     pair b = pairQ b <|> pairBC b

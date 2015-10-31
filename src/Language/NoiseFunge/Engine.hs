@@ -52,18 +52,28 @@ $(makeLenses ''NoiseFungeEngine)
 beatVar :: Getter NoiseFungeEngine (TVar Beat) 
 beatVar = alsaThread.clock
 
+-- Initiate the NoiseFungeEngine
 initNF :: ALSAThreadConfig -> OperatorParams ->
     IO NoiseFungeEngine
 initNF conf pars = do
+    -- start the ALSA thread
     alsa <- startALSAThread conf
+    -- start the befunge thread
     bft <- startBefungeThread (conf^.alsaTempo) pars
     let nfe = NFE alsa bft
+
+    -- read from the alsa clock and write the next beat to the
+    -- noisefunge thread so that it will start computing the next
+    -- set of events.
     void . forkIO $ beatStateHandler (alsa^.clock) $ \nextBeat -> do
         liftIO . atomically $ do
             b <- nextBeat
             putTMVar (bft^.beatIn) b
             return b
     delts <- atomically $ dupTChan (bft^.deltaOut)
+
+    -- fork a thread to read the deltas from the noisefunge thread and
+    -- write them to the ALSA output thread.
     void . forkIO $ forever . atomically $ do
         (b, prs, _, _) <- readTChan delts
         forM_ prs $ \(_, _, delt) -> do
@@ -87,6 +97,8 @@ beatStateHandler bvar f = do
                 if bv == prev then retry else return bv
         f handler >>= S.put
 
+-- beatEvents takes a NoiseFungeEngine and a handler function and calls
+-- the handler when the clock triggers a beat event.
 beatEvents :: (Functor m, MonadIO m) => NoiseFungeEngine ->
     (Beat -> [(PID, ProcessState, Delta)] ->
         [(PID, Maybe String)] -> [String] -> [BefungeStats] -> m a) -> m ()
@@ -115,6 +127,7 @@ beatEvents nfe fn = bev where
             then return []
             else (:) <$> readTChan eout <*> getErrs
 
+-- StartProgram is used to send a program to the NoiseFungeEngine
 startProgram :: NoiseFungeEngine -> ProgArray -> String -> String ->
     String -> IO PID
 startProgram nfe arr name inbuf outbuf = do
@@ -123,6 +136,7 @@ startProgram nfe arr name inbuf outbuf = do
         AddProcess arr name inbuf outbuf (Just mv)
     takeMVar mv
 
+-- StopProgram kills noisefunge programs based on PID or name.
 stopProgram :: NoiseFungeEngine -> Maybe Word32 -> Maybe String ->
     Maybe String -> IO ()
 stopProgram nfe pf nf r = do
