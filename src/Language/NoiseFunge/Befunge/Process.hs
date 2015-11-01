@@ -60,10 +60,17 @@ import Data.Word
 import Language.NoiseFunge.Befunge.VM
 import Language.NoiseFunge.Note
 
+-- This module builds upon the VM code to generate processes that are distinct
+-- to the noisefunge engine. This provides the underlying functionality that
+-- the operators are built around. It includes things such as the program
+-- counter, stack, and process memory.
+
 type Pos = (Word8, Word8)
 
 type ProgArray = UArray Pos Word8
 
+-- Convert a list of lines into a program array. The height will be the number
+-- of lines and the width will be the length of the longest line.
 makeProgArray :: [String] -> ProgArray
 makeProgArray strs = arr where
     rows = fromIntegral $ length strs
@@ -110,6 +117,7 @@ instance B.Binary Event where
     put (ErrorEvent s) = B.putWord8 1 >> B.put s
     put (NoteEvent n) = B.putWord8 2 >> B.put n
 
+-- A delta expresses how a process has changed in the last tick.
 data Delta = Delta {
     _oldpc  :: Maybe PC,
     _newpc  :: Maybe PC,
@@ -159,8 +167,8 @@ data ProcessState = PS {
     _quote   :: !Bool,
     _jump    :: !Bool,
     _fnStack :: !(Maybe [Word8]),
-    _progIn  :: !String,
-    _progOut :: !String,
+    _progIn  :: !String, -- Name of input buffer
+    _progOut :: !String, -- Name of output buffer
     _noteBuf :: !(Maybe Note)
     }
 
@@ -168,6 +176,8 @@ makeProcessState :: ProgArray -> String -> String -> ProcessState
 makeProcessState arr inp outp =
     PS arr 0 def mempty False False mempty inp outp Nothing
 
+-- OperatorParams provides some options for how noisefunge operators should
+-- behave.
 data OperatorParams = OperatorParams {
     haltOnError :: !Bool,
     wrapOnEdge :: !Bool,
