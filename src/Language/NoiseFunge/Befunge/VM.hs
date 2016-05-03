@@ -18,7 +18,7 @@
 -}
 
 {-# LANGUAGE TemplateHaskell, FlexibleInstances, MultiParamTypeClasses,
-             UndecidableInstances #-}
+             UndecidableInstances, FlexibleContexts #-}
 
 module Language.NoiseFunge.Befunge.VM (VM(..), ProcessStateT,
                                        processQueue, buffers, deadProcesses,
@@ -115,6 +115,10 @@ runPS (PST pst) s = runStateT (runContT runner return) s where
 
 instance Functor m => Functor (ProcessStateT w s m) where
     fmap f (PST m) = PST $ fmap f m
+
+instance Applicative m => Applicative (ProcessStateT w s m) where
+    pure = succeed . pure
+    (PST f) <*> (PST a) = PST (f <*> a)
 
 instance MonadTrans (ProcessStateT w s) where
     lift = succeed . lift . lift
