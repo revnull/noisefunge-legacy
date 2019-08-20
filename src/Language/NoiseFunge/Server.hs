@@ -21,10 +21,9 @@
 
 module Language.NoiseFunge.Server (runServer, ServerConfig(..)) where
 
-import Network.Socket hiding (sendTo, recvFrom)
+import Network.Socket
 import Network.Socket.ByteString
 
-import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.STM
 
@@ -128,7 +127,7 @@ runServer conf = do
     rstv <- newTVarIO True
     servs <- forM (conf^.serverHosts) $ \(fam, addr) -> do
         s <- socket fam Datagram defaultProtocol
-        bindSocket s addr
+        bind s addr
         stats <- newTVarIO M.empty
         delts <- newTVarIO M.empty
         void . forkIO $ requestHandler s nfe rstv stats delts

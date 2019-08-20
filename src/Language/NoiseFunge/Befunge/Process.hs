@@ -45,7 +45,6 @@ module Language.NoiseFunge.Befunge.Process (ProgArray, makeProgArray,
                                             tellDelta, tellMem
                                             ) where
 
-import Control.Applicative
 import Control.Lens
 import Control.Monad
 import Control.Monad.RWS
@@ -125,6 +124,9 @@ data Delta = Delta {
     _events :: [Event]
     } deriving (Show, Eq, Ord)
 
+instance Semigroup Delta where
+    (<>) = mappend
+
 instance Monoid Delta where
     mempty = Delta Nothing Nothing Nothing []
     mappend (Delta op1 np1 c1 e1) (Delta op2 np2 c2 e2) =
@@ -142,6 +144,9 @@ type Deltas s = [(PID, s, Delta)] -> [(PID, s, Delta)]
 
 data Stack a = Stack !Word32 [a]
     deriving (Read, Show, Eq, Ord)
+
+instance Semigroup (Stack a) where
+    (<>) = mappend
 
 instance Monoid (Stack a) where
     mempty = Stack 0 []

@@ -27,7 +27,6 @@ module Language.NoiseFunge.Befunge.Operator (OperatorParams(..),
                                              logError, logDebug
                                              ) where
 
-import Control.Applicative
 import Control.Lens
 import Control.Monad.RWS
 

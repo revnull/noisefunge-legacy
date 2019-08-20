@@ -22,7 +22,6 @@
 module Language.NoiseFunge.Note (Note(Note), channel, pitch,
                                  velocity, duration) where
 
-import Control.Applicative
 import Control.Lens
 
 import Data.Default

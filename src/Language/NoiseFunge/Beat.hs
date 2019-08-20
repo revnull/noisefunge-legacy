@@ -24,7 +24,6 @@ module Language.NoiseFunge.Beat (Tempo(Tempo), bpm, subbeats,
                                  (##),
                                  Beats, beats) where
 
-import Control.Applicative
 import Control.Lens
 
 import Data.Binary

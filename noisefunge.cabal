@@ -20,7 +20,11 @@ library
                      Language.NoiseFunge.Server,
                      Language.NoiseFunge.Server.Comm
 
-  build-depends:     base >= 4 && < 5,
+  build-depends:     base >= 4.9 && < 5,
+                     alsa-core,
+                     alsa-seq,
+                     midi,
+                     ConfigFile >= 1.1.4,
                      mtl,
                      transformers,
                      random,
@@ -29,22 +33,18 @@ library
                      lens,
                      containers,
                      data-default,
-                     bytestring >= 0.10.2,
+                     bytestring,
                      explicit-exception,
                      stm,
                      network,
-                     midi,
-                     alsa-core,
-                     alsa-seq,
-                     binary >= 0.7,
-                     ConfigFile
-                     
+                     binary
+
   Ghc-options:       -Wall -O2 -threaded -funbox-strict-fields
 
 executable funged
   hs-source-dirs: funged
   main-is: funged.hs
-  build-depends: base >= 4 && < 5,
+  build-depends: base >= 4.9 && < 5,
                  noisefunge,
                  mtl,
                  array,
@@ -60,7 +60,7 @@ executable nfviewer
   main-is: nfviewer.hs
   other-modules:    Tiler
 
-  build-depends: base >= 4 && < 5,
+  build-depends: base >= 4.9 && < 5,
                  noisefunge,
                  mtl,
                  array,
@@ -77,7 +77,7 @@ executable nftop
   hs-source-dirs: nftop
   main-is: nftop.hs
 
-  build-depends: base >= 4 && < 5,
+  build-depends: base >= 4.9 && < 5,
                  noisefunge,
                  mtl,
                  array,
@@ -93,7 +93,7 @@ executable nfloader
   hs-source-dirs: nfloader
   main-is: nfloader.hs
 
-  build-depends: base >= 4 && < 5,
+  build-depends: base >= 4.9 && < 5,
                  noisefunge,
                  mtl,
                  array,
@@ -107,7 +107,7 @@ executable nfkill
   hs-source-dirs: nfkill
   main-is: nfkill.hs
 
-  build-depends: base >= 4 && < 5,
+  build-depends: base >= 4.9 && < 5,
                  noisefunge,
                  mtl,
                  transformers,
@@ -121,7 +121,7 @@ executable nfreset
   hs-source-dirs: nfreset
   main-is: nfreset.hs
 
-  build-depends: base >= 4 && < 5,
+  build-depends: base >= 4.9 && < 5,
                  noisefunge
   Ghc-options:       -Wall -O2 -threaded 
 
@@ -129,7 +129,7 @@ executable nfops
   hs-source-dirs: nfops
   main-is: nfops.hs
 
-  build-depends: base >= 4 && < 5,
+  build-depends: base >= 4.9 && < 5,
                  noisefunge,
                  lens,
                  containers

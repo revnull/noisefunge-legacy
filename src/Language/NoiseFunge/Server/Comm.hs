@@ -37,7 +37,7 @@ import Control.Monad.Trans.Maybe
 import Data.Binary
 import Data.ByteString.Lazy as BS
 
-import Network.Socket hiding (sendTo, recvFrom)
+import Network.Socket
 import Network.Socket.ByteString
 
 import System.Environment
@@ -129,7 +129,7 @@ withAPIConnection fn = do
             "Invalid NOISEFUNGE_SERVER_HOST or NOISEFUNGE_SERVER_PORT"
         ((ai:_), (sai:_)) -> do
             s <- socket (addrFamily ai) Datagram defaultProtocol
-            bindSocket s (addrAddress ai)
+            bind s (addrAddress ai)
             void $ fn (Conn s (addrAddress sai))
 
 runBuffered :: Monad m => ST.StateT [b] m a -> m a

@@ -70,6 +70,9 @@ queued = lens gettr settr where
     gettr (Q x y) = x <> y
     settr (Q _ _) x = Q x []
 
+instance Semigroup (Queue a) where
+    (<>) = mappend
+
 instance Monoid (Queue a) where
     mempty = Q [] []
     mappend (Q x1 y1) (Q x2 y2) = Q x1 (y2 ++ (reverse x2) ++ y1)
@@ -162,6 +165,9 @@ data Buffer w s m = Buffer {
     _writeQueue  :: Queue (Process w s m),
     _bcastValues :: [w]
   }
+
+instance Semigroup (Buffer w s m) where
+    (<>) = mappend
 
 instance Monoid (Buffer w s m) where
     mempty = Buffer mempty mempty mempty

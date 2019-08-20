@@ -26,7 +26,6 @@ module Language.NoiseFunge.ALSA (startALSAThread, ALSAThread,
                                  tid, clock, inEvents,
                                  outEvents) where
 
-import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Exception
