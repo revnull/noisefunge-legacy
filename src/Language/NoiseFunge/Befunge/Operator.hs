@@ -185,6 +185,20 @@ stdOps = M.fromList $ [
         pushOp 14
     , mkStdOp "F" 'F' "Push 15 onto the stack" $
         pushOp 15
+    , mkStdOp "GOTO" 'G' "Pop y and x. Move program to (y,x)." $ do
+        y <- popOp
+        x <- popOp
+        arr <- use mem
+        pc' <- use pc
+        let tup = (y, x)
+        if inRange (bounds arr) tup
+            then do
+                pc.pos .= tup
+                pc'' <- use pc
+                tellDelta $ def { _oldpc = Just pc', _newpc = Just pc'' }
+                yield
+                runOp (arr ! (y,x))
+            else dieError "Cannot go outside of range" ()
     , mkStdOp "Fork" 'K' "Fork a thread. Push 1 for child, 0 for parent" $ do
         new <- fork
         if new
