@@ -266,6 +266,11 @@ stdOps = M.fromList $ [
         pushOp b
     , mkStdOp "Chomp" '$' "Discard the top item on the stack" $ do
         void popOp
+    , mkStdOp "Null?" 'N' "Push 1 if stack is empty or 0." $ do
+        st <- use stack
+        case pop st of
+            Nothing -> pushOp 1
+            _ -> pushOp 0
     , mkStdOp "Jump" '#' "Jump over the next opcode." $ do
         jump .= True
     , mkStdOp "Quote" '"' "Start/Stop quote mode." $ do       
