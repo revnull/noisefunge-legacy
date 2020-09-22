@@ -1,4 +1,8 @@
-# NoiseFunge
+# NoiseFunge (legacy)
+
+This is the original implementation of Noisefunge in haskell. Development has
+moved to the rust implementation: https://github.com/revnull/noisefunge.rs
+
 
 NoiseFunge is an obfuscated language for music livecoding. It is a member of
 the befunge family of languages. Some features of the language are:
